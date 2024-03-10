@@ -18,7 +18,7 @@ double uniform() {
 // Based on the implementation from Numerical Recipies and 
 // https://dl.acm.org/doi/pdf/10.1145/138351.138364.
 double normal() {
-	double u,v,x,y,q;
+	double u, v, x, y, q;
 	do {
 		u = uniform();
 		v = 1.7156 * (uniform() - 0.5);
