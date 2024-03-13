@@ -36,19 +36,15 @@ int main(void) {
 
 	int n = 100000;
 
-	// Estimate the mean.
-	double sum = 0.0;
+	// Estimate the mean and variance.
+	double sum = 0.0, ssum = 0.0;
 	for (int i = 0; i < n; i++) {
-		sum += normal();
-	}		
+		double sample = normal();
+		sum += sample;
+		ssum += sqr(sample);
+	}	
 	double mu = sum / n;
-
-	// Estimate the variance.
-	sum = 0.0;
-	for (int i = 0; i < n; i++) {
-		sum += sqr(normal() - mu);
-	}		
-	double sig = sum / n;
+	double sig = (ssum / n) - sqr(mu);
 
 	printf("mu: %f, sig: %f\n", mu, sig);
 	return 0;
