@@ -62,20 +62,26 @@ void draw_histogram(double bins[], int n_bins) {
 		SCREEN_HEIGHT, 
 		SDL_WINDOW_SHOWN
 	);
-    SDL_Surface* screenSurface = SDL_GetWindowSurface(window);
+	// The height of the histogram bins is drawn proportional to their probability mass. However, 
+	// as the number of bins increases, their probability mass will tend to 0 and the overall 
+	// histogram size will shrink. To decouple the histogram size from the number of bins we 
+	// we rescale the bins so that the tallest bin always takes up 75% of the screen.
+	double scale = 0.0;
+	for (int i = 0; i < n_bins; i++) {
+		if (bins[i] > scale) {
+			scale = bins[i];
+		}
+	}
+	scale *= 1.25;
 
 	// Draw the histogram.
+    SDL_Surface* screenSurface = SDL_GetWindowSurface(window);
 	SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
 	double width = (double) SCREEN_WIDTH / n_bins;
 	for (int i = 0; i < n_bins; i++) {
-		// The height of the histogram bins is drawn proportional to their probability mass. However, 
-		// as the number of bins increases, their probability mass will tend to 0 and the overall 
-		// histogram size will shrink. To decouple the histogram size from the number of bins we 
-		// we rescale the bins so that the middle bin always takes up 75% of the screen.
-		double scale = bins[n_bins/2] * 1.25;
 		int height = bins[i] * SCREEN_HEIGHT / scale;
 		SDL_Rect rect = {
-			.x = width * i, 
+			.x = round(width * i), 
 			.y = SCREEN_HEIGHT - height, 
 			.w = i == 0 ? width : round(width * i / i), 
 			.h = height
@@ -84,7 +90,7 @@ void draw_histogram(double bins[], int n_bins) {
 	}
 	SDL_UpdateWindowSurface(window);
 
-	//Hack to get window to stay up.
+	// Hack to get window to stay up.
 	SDL_Event e; 
 	int quit = 0; 
 	while(quit == 0) { 
@@ -103,31 +109,28 @@ void draw_histogram(double bins[], int n_bins) {
 int main(void) {
 	srand(time(NULL));
 
-	int n = 10000;
-
-	// Estimate the mean and variance.
-	double sum = 0.0, ssum = 0.0;
-	for (int i = 0; i < n; i++) {
-		double sample = normal();
-		sum += sample;
-		ssum += sqr(sample);
-	}	
-	double mu = sum / n;
-	double sig = (ssum / n) - sqr(mu);
-	printf("mu: %f, sig: %f\n", mu, sig);
-
-
-	// Create a histogram of samples.
-	int n_bins = 50;
-	double low = -3.0, high = 3.0;
+	int n = 10000, n_bins = 50;
+	
+	// Samples from the standard normal.
 	double samples[n];
 	for (int i = 0; i < n; i++) {
 		samples[i] = normal();
 	}
-	double* bins = histogram(samples, n, n_bins, low, high);
-
-	// Draw the histogram.
+	double* bins = histogram(samples, n, n_bins, -3.0, 3.0);
 	draw_histogram(bins, n_bins);
+
+
+	// Samples from a mixture of two Gaussians.
+	double mixture[n];
+	for (int i = 0; i < n; i++) {
+		if (uniform() < 0.3) {
+			mixture[i] = normal() * 1.0 + 2.38;
+		} else {
+			mixture[i] = normal() * 1.2 - 1.3;
+		}
+	}
+	double* mixture_bins = histogram(mixture, n, n_bins, -5.0, 5.0);
+	draw_histogram(mixture_bins, n_bins);
 
 	return 0;
 }
