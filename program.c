@@ -36,16 +36,15 @@ double normal() {
 }
 
 
-int* histogram(double data[], int n_data, double low, double high, int n_bins) {
-	int* bins = calloc(n_bins, sizeof(int));
-
-	// TODO(eugenhotaj): We can speed this up by using binary search.
+// TODO(eugenhotaj): We can speed this up by using binary search.
+double* histogram(double data[], int n_data, int n_bins, double low, double high) {
+	double* bins = calloc(n_bins, sizeof(double));
 	double step_size = (high - low) / n_bins;
 	for (int i = 0; i < n_data; i++) {
 		for (int j = 0; j < n_bins; j++) {
 			double boundary = low + (j+1) * step_size;
 			if (data[i] < boundary || j == n_bins - 1) {
-				bins[j] += 1;
+				bins[j] += 1.0 / n_data;
 				break;
 			}
 		}
@@ -53,45 +52,10 @@ int* histogram(double data[], int n_data, double low, double high, int n_bins) {
 	return bins;
 }
 
-
-int main(void) {
-	srand(time(NULL));
-
-	int n = 10000, n_bins = 10;
-
-	// Estimate the mean and variance.
-	double sum = 0.0, ssum = 0.0;
-	for (int i = 0; i < n; i++) {
-		double sample = normal();
-		sum += sample;
-		ssum += sqr(sample);
-	}	
-	double mu = sum / n;
-	double sig = (ssum / n) - sqr(mu);
-	printf("mu: %f, sig: %f\n", mu, sig);
-
-
-	// Createa histogram of samples.
-	double samples[n];
-	for (int i = 0; i < n; i++) {
-		samples[i] = normal();
-	}
-	int* bins = histogram(samples, n, -3.0, 3.0, n_bins);
-
-	for (int i = 0; i < n_bins; i++) {
-		printf("%d ", bins[i]);
-	}
-	printf("\n");
-
-    return 0;
-
-    if(SDL_Init(SDL_INIT_VIDEO) < 0) {
-		printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
-		return 1;
-    }
-
+void draw_histogram(double bins[], int n_bins) {
+	SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
-		"SDL Tutorial", 
+		"Histogram", 
 		SDL_WINDOWPOS_UNDEFINED, 
 		SDL_WINDOWPOS_UNDEFINED, 
 		SCREEN_WIDTH, 
@@ -100,14 +64,24 @@ int main(void) {
 	);
     SDL_Surface* screenSurface = SDL_GetWindowSurface(window);
 
-
-	// Clear the screen.
+	// Draw the histogram.
 	SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
-
-	// Draw a rectangle.
-	SDL_Rect rect = {.x = 50, .y = 50, .w = 100, .h = 100};
-	SDL_FillRect(screenSurface, &rect, SDL_MapRGB(screenSurface->format, 0xFF, 0x00, 0x00));
-
+	double width = (double) SCREEN_WIDTH / n_bins;
+	for (int i = 0; i < n_bins; i++) {
+		// The height of the histogram bins is drawn proportional to their probability mass. However, 
+		// as the number of bins increases, their probability mass will tend to 0 and the overall 
+		// histogram size will shrink. To decouple the histogram size from the number of bins we 
+		// we rescale the bins so that the middle bin always takes up 75% of the screen.
+		double scale = bins[n_bins/2] * 1.25;
+		int height = bins[i] * SCREEN_HEIGHT / scale;
+		SDL_Rect rect = {
+			.x = width * i, 
+			.y = SCREEN_HEIGHT - height, 
+			.w = i == 0 ? width : round(width * i / i), 
+			.h = height
+		};
+		SDL_FillRect(screenSurface, &rect, SDL_MapRGB(screenSurface->format, 0xFF, 0x00, 0x00));
+	}
 	SDL_UpdateWindowSurface(window);
 
 	//Hack to get window to stay up.
@@ -123,6 +97,38 @@ int main(void) {
 
     SDL_DestroyWindow(window);
     SDL_Quit();
+}
+
+
+int main(void) {
+	srand(time(NULL));
+
+	int n = 10000;
+
+	// Estimate the mean and variance.
+	double sum = 0.0, ssum = 0.0;
+	for (int i = 0; i < n; i++) {
+		double sample = normal();
+		sum += sample;
+		ssum += sqr(sample);
+	}	
+	double mu = sum / n;
+	double sig = (ssum / n) - sqr(mu);
+	printf("mu: %f, sig: %f\n", mu, sig);
+
+
+	// Create a histogram of samples.
+	int n_bins = 50;
+	double low = -3.0, high = 3.0;
+	double samples[n];
+	for (int i = 0; i < n; i++) {
+		samples[i] = normal();
+	}
+	double* bins = histogram(samples, n, n_bins, low, high);
+
+	// Draw the histogram.
+	draw_histogram(bins, n_bins);
+
 	return 0;
 }
 
