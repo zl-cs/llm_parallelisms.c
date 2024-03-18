@@ -1,3 +1,8 @@
+# Custom items.
+SDL2.framework/
+.vscode/
+.DS_Store
+
 # Prerequisites
 *.d
 
