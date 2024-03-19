@@ -12,6 +12,16 @@ double sqr(double x) {
 	return x * x;
 }
 
+double max(double values[], int n_values) {
+	double max_ = values[0];
+	for (int i = 1; i < n_values; i++) {
+		if (values[i] > max_) {
+			max_ = values[i];
+		}
+	}
+	return max_;
+}
+
 // Generates a sample from the uniform distribution. 
 // Assumes that srand() has already been called.
 double uniform() {
@@ -52,7 +62,7 @@ double* histogram(double data[], int n_data, int n_bins, double low, double high
 	return bins;
 }
 
-void draw_histogram(double bins[], int n_bins) {
+void draw_histogram(double bins[], int n_bins, double y_min, double y_max) {
 	SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
 		"Histogram", 
@@ -62,29 +72,17 @@ void draw_histogram(double bins[], int n_bins) {
 		SCREEN_HEIGHT, 
 		SDL_WINDOW_SHOWN
 	);
-	// The height of the histogram bins is drawn proportional to their probability mass. However, 
-	// as the number of bins increases, their probability mass will tend to 0 and the overall 
-	// histogram size will shrink. To decouple the histogram size from the number of bins we 
-	// we rescale the bins so that the tallest bin always takes up 75% of the screen.
-	double scale = 0.0;
-	for (int i = 0; i < n_bins; i++) {
-		if (bins[i] > scale) {
-			scale = bins[i];
-		}
-	}
-	scale *= 1.25;
-
 	// Draw the histogram.
 	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 	SDL_RenderClear(renderer);
 	double width = (double) SCREEN_WIDTH / n_bins;
 	for (int i = 0; i < n_bins; i++) {
-		int height = bins[i] * SCREEN_HEIGHT / scale;
+		int height = (bins[i] - y_min) / (y_max - y_min) * SCREEN_HEIGHT;
 		SDL_Rect rect = {
-			.x = round(width * i), 
+			.x = width * i,
 			.y = SCREEN_HEIGHT - height, 
-			.w = i == 0 ? width : round(width * i / i), 
+			.w = width, 
 			.h = height
 		};
 		SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
@@ -110,7 +108,7 @@ void draw_histogram(double bins[], int n_bins) {
 int main(void) {
 	srand(time(NULL));
 
-	int n = 10000, n_bins = 50;
+	int n = 10000, n_bins = 30;
 	
 	// Samples from the standard normal.
 	double samples[n];
@@ -118,7 +116,7 @@ int main(void) {
 		samples[i] = normal();
 	}
 	double* bins = histogram(samples, n, n_bins, -3.0, 3.0);
-	draw_histogram(bins, n_bins);
+	draw_histogram(bins, n_bins, 0, max(bins, n_bins) * 1.25);
 
 
 	// Samples from a mixture of two Gaussians.
@@ -131,7 +129,7 @@ int main(void) {
 		}
 	}
 	double* mixture_bins = histogram(mixture, n, n_bins, -5.0, 5.0);
-	draw_histogram(mixture_bins, n_bins);
+	draw_histogram(mixture_bins, n_bins, 0, max(bins, n_bins) * 1.25);
 
 	return 0;
 }
