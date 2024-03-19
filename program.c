@@ -22,6 +22,16 @@ double max(double values[], int n_values) {
 	return max_;
 }
 
+double min(double values[], int n_values) {
+	double min_ = values[0];
+	for (int i = 1; i < n_values; i++) {
+		if (values[i] < min_) {
+			min_= values[i];
+		}
+	}
+	return min_;
+}
+
 // Generates a sample from the uniform distribution. 
 // Assumes that srand() has already been called.
 double uniform() {
@@ -47,12 +57,14 @@ double normal() {
 
 
 // TODO(eugenhotaj): We can speed this up by using binary search.
-double* histogram(double data[], int n_data, int n_bins, double low, double high) {
+double* histogram(double data[], int n_data, int n_bins) {
 	double* bins = calloc(n_bins, sizeof(double));
-	double step_size = (high - low) / n_bins;
+	double x_min = min(data, n_data);
+	double x_max = max(data, n_data);
+	double step_size = (x_max - x_min) / n_bins;
 	for (int i = 0; i < n_data; i++) {
 		for (int j = 0; j < n_bins; j++) {
-			double boundary = low + (j+1) * step_size;
+			double boundary = x_min + (j+1) * step_size;
 			if (data[i] < boundary || j == n_bins - 1) {
 				bins[j] += 1.0 / n_data;
 				break;
@@ -117,7 +129,7 @@ int main(void) {
 	for (int i = 0; i < n; i++) {
 		samples[i] = normal();
 	}
-	double* bins = histogram(samples, n, n_bins, -3.0, 3.0);
+	double* bins = histogram(samples, n, n_bins);
 	draw_histogram(bins, n_bins, 0, max(bins, n_bins) * 1.25);
 
 
@@ -130,7 +142,7 @@ int main(void) {
 			mixture[i] = normal() * 1.2 - 1.3;
 		}
 	}
-	double* mixture_bins = histogram(mixture, n, n_bins, -5.0, 5.0);
+	double* mixture_bins = histogram(mixture, n, n_bins);
 	draw_histogram(mixture_bins, n_bins, 0, max(bins, n_bins) * 1.25);
 
 	return 0;
