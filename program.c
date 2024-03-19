@@ -82,7 +82,9 @@ void draw_histogram(double bins[], int n_bins, double y_min, double y_max) {
 		SDL_Rect rect = {
 			.x = width * i,
 			.y = SCREEN_HEIGHT - height, 
-			.w = width, 
+			// TODO(eugenhotaj): When width is not an integer, some bins will have gaps between them. We add
+			// +1 to the width as a hack to remove the gaps, but this is not strictly correct.
+			.w = width + 1, 
 			.h = height
 		};
 		SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
@@ -108,7 +110,7 @@ void draw_histogram(double bins[], int n_bins, double y_min, double y_max) {
 int main(void) {
 	srand(time(NULL));
 
-	int n = 10000, n_bins = 30;
+	int n = 10000, n_bins = 50;
 	
 	// Samples from the standard normal.
 	double samples[n];
