@@ -75,8 +75,9 @@ void draw_histogram(double bins[], int n_bins) {
 	scale *= 1.25;
 
 	// Draw the histogram.
-    SDL_Surface* screenSurface = SDL_GetWindowSurface(window);
-	SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
+	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	SDL_RenderClear(renderer);
 	double width = (double) SCREEN_WIDTH / n_bins;
 	for (int i = 0; i < n_bins; i++) {
 		int height = bins[i] * SCREEN_HEIGHT / scale;
@@ -86,9 +87,10 @@ void draw_histogram(double bins[], int n_bins) {
 			.w = i == 0 ? width : round(width * i / i), 
 			.h = height
 		};
-		SDL_FillRect(screenSurface, &rect, SDL_MapRGB(screenSurface->format, 0xFF, 0x00, 0x00));
+		SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+		SDL_RenderFillRect(renderer, &rect);
 	}
-	SDL_UpdateWindowSurface(window);
+	SDL_RenderPresent(renderer);
 
 	// Hack to get window to stay up.
 	SDL_Event e; 
@@ -101,7 +103,6 @@ void draw_histogram(double bins[], int n_bins) {
 		}
 	}
 
-    SDL_DestroyWindow(window);
     SDL_Quit();
 }
 
@@ -134,4 +135,3 @@ int main(void) {
 
 	return 0;
 }
-
