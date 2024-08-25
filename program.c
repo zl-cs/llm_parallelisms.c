@@ -106,6 +106,8 @@ void test_draw_linear_regression() {
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	clear_screen(renderer);
 
+	draw_axes(renderer, -0.1, 1.1, -1, 5);
+
 	// Sample some points from y = 3x + 1 with added Gaussian noise in N(0, 0.2).
 	int n = 10;
 	double x[n], y[n];
@@ -134,8 +136,8 @@ void test_draw_linear_regression() {
 
 int main(void) {
 	srand(time(NULL));
-	test_draw_gaussian();
-	test_draw_gaussian_mixture();
+	// test_draw_gaussian();
+	// test_draw_gaussian_mixture();
 	test_draw_linear_regression();
 
 	return 0;

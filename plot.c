@@ -114,6 +114,33 @@ void draw_points(
 }
 
 
+void draw_axes(SDL_Renderer *renderer, double x_min, double x_max, double y_min, double y_max) {
+    int tick_half_size = 3;
+    SDL_SetRenderDrawColor(renderer, 64, 64, 64, 255);
+
+    // Draw x-axis.
+    int y_origin = SCREEN_HEIGHT - (0 - y_min) / (y_max - y_min) * SCREEN_HEIGHT;
+    SDL_RenderDrawLine(renderer, 0, y_origin, SCREEN_WIDTH, y_origin);
+
+    // Draw y-axis.
+    int x_origin = (0 - x_min) / (x_max - x_min) * SCREEN_WIDTH;
+    SDL_RenderDrawLine(renderer, x_origin, 0, x_origin, SCREEN_HEIGHT);
+
+    // Draw tick marks on x-axis.
+    int num_ticks = 10;
+    for (int i = -num_ticks; i <= num_ticks; i++) {
+        int x = x_origin + i * (SCREEN_WIDTH - x_origin) / num_ticks;
+        SDL_RenderDrawLine(renderer, x, y_origin - tick_half_size, x, y_origin + tick_half_size);
+    }
+
+    // Draw tick marks on y-axis.
+    for (int i = -num_ticks; i <= num_ticks; i++) {
+        int y = y_origin - i * y_origin / num_ticks;
+        SDL_RenderDrawLine(renderer, x_origin - tick_half_size, y, x_origin + tick_half_size, y);
+    }
+}
+
+
 void clear_screen(SDL_Renderer *renderer) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderClear(renderer);
