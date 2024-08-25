@@ -101,14 +101,16 @@ void draw_histogram(SDL_Renderer *renderer, double bins[], int n_bins, double y_
 }
 
 
-void draw_scatter_plot(SDL_Renderer *renderer, double x[], double y[], int n) {
-    // Find min and max values for x and y.
-    double x_min = min(x, n);
-    double x_max = max(x, n);
-    double y_min = min(y, n);
-    double y_max = max(y, n);
-
-    // Draw scatter plot points.
+void draw_scatter_plot(
+	SDL_Renderer *renderer, 
+	double x[], 
+	double y[], 
+	int n, 
+	double x_min, 
+	double x_max, 
+	double y_min,
+	double y_max
+) {
     SDL_SetRenderDrawColor(renderer, MAIN_RGBA[0], MAIN_RGBA[1], MAIN_RGBA[2], MAIN_RGBA[3]);
     for (int i = 0; i < n; i++) {
         int px = (x[i] - x_min) / (x_max - x_min) * SCREEN_WIDTH;
@@ -119,6 +121,26 @@ void draw_scatter_plot(SDL_Renderer *renderer, double x[], double y[], int n) {
     }
 }
 
+void draw_points(
+	SDL_Renderer *renderer, 
+	double x[], 
+	double y[], 
+	int n, 
+	double x_min, 
+	double x_max, 
+	double y_min, 
+	double y_max
+) {
+    SDL_SetRenderDrawColor(renderer, MAIN_RGBA[0], MAIN_RGBA[1], MAIN_RGBA[2], MAIN_RGBA[3]);
+    for (int i = 0; i < n; i++) {
+        int px = (x[i] - x_min) / (x_max - x_min) * SCREEN_WIDTH;
+        int py = SCREEN_HEIGHT - (y[i] - y_min) / (y_max - y_min) * SCREEN_HEIGHT;
+        
+        SDL_Rect point = {px - 1, py - 1, 2, 2};
+        SDL_RenderFillRect(renderer, &point);
+    }
+
+}
 
 void clear_screen(SDL_Renderer *renderer) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
@@ -139,10 +161,7 @@ void show_and_wait(SDL_Renderer *renderer) {
 	clear_screen(renderer);
 }
 
-
-int main(void) {
-	srand(time(NULL));
-
+void test_draw_gaussian() {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
         "Histogram",
@@ -155,43 +174,95 @@ int main(void) {
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	clear_screen(renderer);
 
-	int n1 = 10000, n_bins = 50;
-
-	// Samples from the standard normal.
-	double samples[n1];
-	for (int i = 0; i < n1; i++) {
+	int n = 10000, n_bins = 50;
+	double samples[n];
+	for (int i = 0; i < n; i++) {
 		samples[i] = normal();
 	}
-	double* bins = histogram(samples, n1, n_bins);
+	double* bins = histogram(samples, n, n_bins);
 	draw_histogram(renderer, bins, n_bins, 0, max(bins, n_bins) * 1.25);
 	show_and_wait(renderer);
 
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+} 
+
+void test_draw_gaussian_mixture() {
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_Window* window = SDL_CreateWindow(
+        "Histogram",
+        SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        SDL_WINDOW_SHOWN
+    );
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	clear_screen(renderer);
 
 	// Samples from a mixture of two Gaussians.
-	double mixture[n1];
-	for (int i = 0; i < n1; i++) {
+	int n = 10000, n_bins = 50;
+	double mixture[n];
+	for (int i = 0; i < n; i++) {
 		if (uniform() < 0.3) {
 			mixture[i] = normal() * 1.0 + 2.38;
 		} else {
 			mixture[i] = normal() * 1.2 - 1.3;
 		}
 	}
-	double* mixture_bins = histogram(mixture, n1, n_bins);
+	double* mixture_bins = histogram(mixture, n, n_bins);
 	draw_histogram(renderer, mixture_bins, n_bins, 0, max(mixture_bins, n_bins) * 1.25);
 	show_and_wait(renderer);
 
-	// Draw a scatter plot.
-	int n2 = 10;
-	double x[n2], y[n2];
-	for (int i = 0; i < n2; i++) {
-		x[i] = normal();
-		y[i] = normal();
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+}
+
+void test_draw_linear_regression() {
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_Window* window = SDL_CreateWindow(
+        "Histogram",
+        SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        SDL_WINDOW_SHOWN
+    );
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	clear_screen(renderer);
+
+	// Sample some points from y = 3x + 1 with added Gaussian noise in N(0, 0.2).
+	int n = 10;
+	double x[n], y[n];
+	for (int i = 0; i < n; i++){
+		x[i] = uniform();
+		y[i] = 3 * x[i] + 1;
+		y[i] += normal() * 0.2;
 	}
-	draw_scatter_plot(renderer, x, y, n2);
+	draw_scatter_plot(renderer, x, y, n, -0.1, 1.1, -1, 5);
+
+	// Draw the line y = 3x + 1.
+	int n_line = 1000;
+	double line_x[n_line], line_y[n_line];
+	for (int i = 0; i < n_line; i++) {
+		line_x[i] = (double) i / n_line;
+		line_y[i] = 3 * line_x[i] + 1;
+	}
+	draw_points(renderer, line_x, line_y, n_line, -0.1, 1.1, -1, 5);
 
 	show_and_wait(renderer);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+}
+
+int main(void) {
+	srand(time(NULL));
+	test_draw_gaussian();
+	test_draw_gaussian_mixture();
+	test_draw_linear_regression();
+
 	return 0;
 }
