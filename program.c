@@ -75,46 +75,61 @@ double* histogram(double data[], int n_data, int n_bins) {
 }
 
 void draw_histogram(double bins[], int n_bins, double y_min, double y_max) {
-	SDL_Init(SDL_INIT_VIDEO);
+    SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
-		"Histogram", 
-		SDL_WINDOWPOS_UNDEFINED, 
-		SDL_WINDOWPOS_UNDEFINED, 
-		SCREEN_WIDTH, 
-		SCREEN_HEIGHT, 
-		SDL_WINDOW_SHOWN
-	);
-	// Draw the histogram.
-	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-	SDL_RenderClear(renderer);
-	double width = (double) SCREEN_WIDTH / n_bins;
-	for (int i = 0; i < n_bins; i++) {
-		int height = (bins[i] - y_min) / (y_max - y_min) * SCREEN_HEIGHT;
-		SDL_Rect rect = {
-			.x = width * i,
-			.y = SCREEN_HEIGHT - height, 
-			// TODO(eugenhotaj): When width is not an integer, some bins will have gaps between them. We add
-			// +1 to the width as a hack to remove the gaps, but this is not strictly correct.
-			.w = width + 1, 
-			.h = height
-		};
-		SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-		SDL_RenderFillRect(renderer, &rect);
-	}
-	SDL_RenderPresent(renderer);
+        "Histogram",
+        SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        SDL_WINDOW_SHOWN
+    );
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    
+    // Set background color
+    SDL_SetRenderDrawColor(renderer, 240, 240, 240, 255);
+    SDL_RenderClear(renderer);
 
-	// Hack to get window to stay up.
-	SDL_Event e; 
-	int quit = 0; 
-	while(quit == 0) { 
-		while(SDL_PollEvent(&e)){ 
-			if(e.type == SDL_QUIT) {
-				quit = 1; 
-			} 
-		}
-	}
+    // Draw axes
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderDrawLine(renderer, 50, SCREEN_HEIGHT - 50, SCREEN_WIDTH - 50, SCREEN_HEIGHT - 50);  // x-axis
+    SDL_RenderDrawLine(renderer, 50, 50, 50, SCREEN_HEIGHT - 50);  // y-axis
 
+    double width = (double)(SCREEN_WIDTH - 100) / n_bins;
+    int max_height = SCREEN_HEIGHT - 100;
+
+    // Draw histogram bars
+    for (int i = 0; i < n_bins; i++) {
+        int height = (bins[i] - y_min) / (y_max - y_min) * max_height;
+        SDL_Rect rect = {
+            .x = 50 + width * i,
+            .y = SCREEN_HEIGHT - 50 - height,
+            .w = width - 1,  // Leave 1 pixel gap between bars
+            .h = height
+        };
+        SDL_SetRenderDrawColor(renderer, 0, 120, 255, 255);
+        SDL_RenderFillRect(renderer, &rect);
+        
+        // Draw outline
+        SDL_SetRenderDrawColor(renderer, 0, 60, 120, 255);
+        SDL_RenderDrawRect(renderer, &rect);
+    }
+
+    SDL_RenderPresent(renderer);
+
+    // Event loop
+    SDL_Event e;
+    int quit = 0;
+    while (quit == 0) {
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) {
+                quit = 1;
+            }
+        }
+    }
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 }
 

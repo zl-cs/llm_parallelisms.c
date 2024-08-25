@@ -2,6 +2,7 @@
 SDL2.framework/
 .vscode/
 .DS_Store
+.env
 
 # Prerequisites
 *.d
