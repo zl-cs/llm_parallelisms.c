@@ -78,13 +78,14 @@ double* histogram(double data[], int n_data, int n_bins) {
 	return bins;
 }
 
-void draw_histogram(SDL_Renderer *renderer, double bins[], int n_bins, double y_min, double y_max) { 
-    double width = (double) SCREEN_WIDTH / n_bins;
-    int max_height = SCREEN_HEIGHT;
+void draw_histogram(SDL_Renderer *renderer, double data[], int n_data, int n_bins) { 
+	double* bins = histogram(data, n_data, n_bins);
+	double y_max = max(bins, n_bins);
 
-    // Draw histogram bars
+    double width = (double) SCREEN_WIDTH / n_bins;
     for (int i = 0; i < n_bins; i++) {
-        int height = (bins[i] - y_min) / (y_max - y_min) * max_height;
+    	// Draw bar.
+        int height = bins[i] / y_max * SCREEN_HEIGHT;
         SDL_Rect rect = {
             .x = width * i,
             .y = SCREEN_HEIGHT - height,
@@ -94,7 +95,7 @@ void draw_histogram(SDL_Renderer *renderer, double bins[], int n_bins, double y_
         SDL_SetRenderDrawColor(renderer, MAIN_RGBA[0], MAIN_RGBA[1], MAIN_RGBA[2], MAIN_RGBA[3]);
         SDL_RenderFillRect(renderer, &rect);
         
-        // Draw outline
+        // Draw outline.
         SDL_SetRenderDrawColor(renderer, ACCENT_RGBA[0], ACCENT_RGBA[1], ACCENT_RGBA[2], ACCENT_RGBA[3]);
         SDL_RenderDrawRect(renderer, &rect);
     }
@@ -179,8 +180,7 @@ void test_draw_gaussian() {
 	for (int i = 0; i < n; i++) {
 		samples[i] = normal();
 	}
-	double* bins = histogram(samples, n, n_bins);
-	draw_histogram(renderer, bins, n_bins, 0, max(bins, n_bins) * 1.25);
+	draw_histogram(renderer, samples, n, n_bins);
 	show_and_wait(renderer);
 
     SDL_DestroyRenderer(renderer);
@@ -211,8 +211,7 @@ void test_draw_gaussian_mixture() {
 			mixture[i] = normal() * 1.2 - 1.3;
 		}
 	}
-	double* mixture_bins = histogram(mixture, n, n_bins);
-	draw_histogram(renderer, mixture_bins, n_bins, 0, max(mixture_bins, n_bins) * 1.25);
+	draw_histogram(renderer, mixture, n, n_bins);
 	show_and_wait(renderer);
 
     SDL_DestroyRenderer(renderer);
