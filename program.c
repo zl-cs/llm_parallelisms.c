@@ -8,8 +8,6 @@
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 
-const int BACKGROUND_RGBA[] = {240, 240, 240, 255};
-const int AXIS_RGBA[] = {0, 0, 0, 255};
 const int MAIN_RGBA[] = {0, 120, 255, 255};
 const int ACCENT_RGBA[] = {0, 60, 120, 255};
 
@@ -80,36 +78,16 @@ double* histogram(double data[], int n_data, int n_bins) {
 	return bins;
 }
 
-void draw_histogram(double bins[], int n_bins, double y_min, double y_max) {
-    SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window* window = SDL_CreateWindow(
-        "Histogram",
-        SDL_WINDOWPOS_UNDEFINED,
-        SDL_WINDOWPOS_UNDEFINED,
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        SDL_WINDOW_SHOWN
-    );
-    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    
-    // Set background color
-    SDL_SetRenderDrawColor(renderer, BACKGROUND_RGBA[0], BACKGROUND_RGBA[1], BACKGROUND_RGBA[2], BACKGROUND_RGBA[3]);
-    SDL_RenderClear(renderer);
-
-    // Draw axes
-    SDL_SetRenderDrawColor(renderer, AXIS_RGBA[0], AXIS_RGBA[1], AXIS_RGBA[2], AXIS_RGBA[3]);
-    SDL_RenderDrawLine(renderer, 50, SCREEN_HEIGHT - 50, SCREEN_WIDTH - 50, SCREEN_HEIGHT - 50);  // x-axis
-    SDL_RenderDrawLine(renderer, 50, 50, 50, SCREEN_HEIGHT - 50);  // y-axis
-
-    double width = (double)(SCREEN_WIDTH - 100) / n_bins;
-    int max_height = SCREEN_HEIGHT - 100;
+void draw_histogram(SDL_Renderer *renderer, double bins[], int n_bins, double y_min, double y_max) { 
+    double width = (double) SCREEN_WIDTH / n_bins;
+    int max_height = SCREEN_HEIGHT;
 
     // Draw histogram bars
     for (int i = 0; i < n_bins; i++) {
         int height = (bins[i] - y_min) / (y_max - y_min) * max_height;
         SDL_Rect rect = {
-            .x = 50 + width * i,
-            .y = SCREEN_HEIGHT - 50 - height,
+            .x = width * i,
+            .y = SCREEN_HEIGHT - height,
             .w = width - 1,  // Leave 1 pixel gap between bars
             .h = height
         };
@@ -120,10 +98,35 @@ void draw_histogram(double bins[], int n_bins, double y_min, double y_max) {
         SDL_SetRenderDrawColor(renderer, ACCENT_RGBA[0], ACCENT_RGBA[1], ACCENT_RGBA[2], ACCENT_RGBA[3]);
         SDL_RenderDrawRect(renderer, &rect);
     }
+}
 
-    SDL_RenderPresent(renderer);
 
-    // Event loop
+void draw_scatter_plot(SDL_Renderer *renderer, double x[], double y[], int n) {
+    // Find min and max values for x and y.
+    double x_min = min(x, n);
+    double x_max = max(x, n);
+    double y_min = min(y, n);
+    double y_max = max(y, n);
+
+    // Draw scatter plot points.
+    SDL_SetRenderDrawColor(renderer, MAIN_RGBA[0], MAIN_RGBA[1], MAIN_RGBA[2], MAIN_RGBA[3]);
+    for (int i = 0; i < n; i++) {
+        int px = (x[i] - x_min) / (x_max - x_min) * SCREEN_WIDTH;
+        int py = SCREEN_HEIGHT - (y[i] - y_min) / (y_max - y_min) * SCREEN_HEIGHT;
+        
+        SDL_Rect point = {px - 2, py - 2, 4, 4};
+        SDL_RenderFillRect(renderer, &point);
+    }
+}
+
+
+void clear_screen(SDL_Renderer *renderer) {
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderClear(renderer);
+}
+
+void show_and_wait(SDL_Renderer *renderer) {
+	SDL_RenderPresent(renderer);
     SDL_Event e;
     int quit = 0;
     while (quit == 0) {
@@ -133,17 +136,16 @@ void draw_histogram(double bins[], int n_bins, double y_min, double y_max) {
             }
         }
     }
-
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+	clear_screen(renderer);
 }
 
 
-void draw_scatter_plot(double x[], double y[], int n) {
+int main(void) {
+	srand(time(NULL));
+
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
-        "Scatter Plot",
+        "Histogram",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
         SCREEN_WIDTH,
@@ -151,62 +153,18 @@ void draw_scatter_plot(double x[], double y[], int n) {
         SDL_WINDOW_SHOWN
     );
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    
-    // Set background color
-    SDL_SetRenderDrawColor(renderer, BACKGROUND_RGBA[0], BACKGROUND_RGBA[1], BACKGROUND_RGBA[2], BACKGROUND_RGBA[3]);
-    SDL_RenderClear(renderer);
-
-    // Draw axes
-    SDL_SetRenderDrawColor(renderer, AXIS_RGBA[0], AXIS_RGBA[1], AXIS_RGBA[2], AXIS_RGBA[3]);
-    SDL_RenderDrawLine(renderer, 50, SCREEN_HEIGHT - 50, SCREEN_WIDTH - 50, SCREEN_HEIGHT - 50);  // x-axis
-    SDL_RenderDrawLine(renderer, 50, 50, 50, SCREEN_HEIGHT - 50);  // y-axis
-
-    // Find min and max values for x and y
-    double x_min = min(x, n);
-    double x_max = max(x, n);
-    double y_min = min(y, n);
-    double y_max = max(y, n);
-
-    // Draw scatter plot points
-    SDL_SetRenderDrawColor(renderer, MAIN_RGBA[0], MAIN_RGBA[1], MAIN_RGBA[2], MAIN_RGBA[3]);
-    for (int i = 0; i < n; i++) {
-        int px = 50 + (x[i] - x_min) / (x_max - x_min) * (SCREEN_WIDTH - 100);
-        int py = SCREEN_HEIGHT - 50 - (y[i] - y_min) / (y_max - y_min) * (SCREEN_HEIGHT - 100);
-        
-        SDL_Rect point = {px - 2, py - 2, 5, 5};
-        SDL_RenderFillRect(renderer, &point);
-    }
-
-    SDL_RenderPresent(renderer);
-
-    // Event loop
-    SDL_Event e;
-    int quit = 0;
-    while (quit == 0) {
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) {
-                quit = 1;
-            }
-        }
-    }
-
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-}
-
-int main(void) {
-	srand(time(NULL));
+	clear_screen(renderer);
 
 	int n1 = 10000, n_bins = 50;
-	
+
 	// Samples from the standard normal.
 	double samples[n1];
 	for (int i = 0; i < n1; i++) {
 		samples[i] = normal();
 	}
 	double* bins = histogram(samples, n1, n_bins);
-	draw_histogram(bins, n_bins, 0, max(bins, n_bins) * 1.25);
+	draw_histogram(renderer, bins, n_bins, 0, max(bins, n_bins) * 1.25);
+	show_and_wait(renderer);
 
 
 	// Samples from a mixture of two Gaussians.
@@ -219,7 +177,8 @@ int main(void) {
 		}
 	}
 	double* mixture_bins = histogram(mixture, n1, n_bins);
-	draw_histogram(mixture_bins, n_bins, 0, max(mixture_bins, n_bins) * 1.25);
+	draw_histogram(renderer, mixture_bins, n_bins, 0, max(mixture_bins, n_bins) * 1.25);
+	show_and_wait(renderer);
 
 	// Draw a scatter plot.
 	int n2 = 10;
@@ -228,7 +187,11 @@ int main(void) {
 		x[i] = normal();
 		y[i] = normal();
 	}
-	draw_scatter_plot(x, y, n2);
+	draw_scatter_plot(renderer, x, y, n2);
 
+	show_and_wait(renderer);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 	return 0;
 }
