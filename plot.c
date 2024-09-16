@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include "math.c"
 
 //Screen dimension constants.
 const int SCREEN_WIDTH = 640;
@@ -8,31 +9,11 @@ const int MAIN_RGBA[] = {0, 120, 255, 255};
 const int ACCENT_RGBA[] = {0, 60, 120, 255};
 
 
-double _max(double values[], int n_values) {
-	double max_ = values[0];
-	for (int i = 1; i < n_values; i++) {
-		if (values[i] > max_) {
-			max_ = values[i];
-		}
-	}
-	return max_;
-}
-
-double _min(double values[], int n_values) {
-	double min_ = values[0];
-	for (int i = 1; i < n_values; i++) {
-		if (values[i] < min_) {
-			min_= values[i];
-		}
-	}
-	return min_;
-}
-
 // TODO(eugenhotaj): We can speed this up by using binary search.
 double* _histogram(double data[], int n_data, int n_bins) {
 	double* bins = calloc(n_bins, sizeof(double));
-	double x_min = _min(data, n_data);
-	double x_max = _max(data, n_data);
+	double x_min = min(data, n_data);
+	double x_max = max(data, n_data);
 	double step_size = (x_max - x_min) / n_bins;
 	for (int i = 0; i < n_data; i++) {
 		for (int j = 0; j < n_bins; j++) {
@@ -49,7 +30,7 @@ double* _histogram(double data[], int n_data, int n_bins) {
 
 void draw_histogram(SDL_Renderer *renderer, double data[], int n_data, int n_bins) { 
 	double* bins = _histogram(data, n_data, n_bins);
-	double y_max = _max(bins, n_bins);
+	double y_max = max(bins, n_bins);
 
     double width = (double) SCREEN_WIDTH / n_bins;
     for (int i = 0; i < n_bins; i++) {
