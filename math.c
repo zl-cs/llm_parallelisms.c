@@ -52,3 +52,39 @@ double normal() {
 	return v / u;
 }
 
+
+// Computes the safe softmax of values[] inplace.
+// NOTE: This is a slow version of softmax which uses 3 loads/stores.
+// It's mostly here to contrast with the fast, online version below
+// which only uses 2 loads / stores.
+void softmax_slow(double values[], int n_values) {
+    double max_value = max(values, n_values);
+
+    double Z = 0.0;
+    for (int i = 0; i < n_values; i++) {
+        Z += exp(values[i] - max_value);
+    }
+
+    for (int i = 0; i < n_values; i++) {
+        values[i] = exp(values[i] - max_value) / Z;
+    }
+}
+
+
+// Computes the safe softmax of values[] inplace.
+void softmax(double values[], int n_values) {
+    double max_value = -INFINITY;
+    double Z = 0;
+    for (int i = 0; i < n_values; i++) {
+        double prev_max = max_value;
+        if (values[i] > max_value) {
+            max_value = values[i];
+        }
+        Z *= exp(prev_max - max_value);
+        Z += exp(values[i] - max_value);
+    }
+
+    for (int i = 0; i < n_values; i++) {
+        values[i] = exp(values[i] - max_value) / Z;
+    }
+}

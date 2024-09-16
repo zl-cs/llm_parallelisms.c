@@ -4,6 +4,17 @@
 #include "plot.c"
 
 
+void print_doubles(double values[], int n_values) {
+	printf("[ ");
+	for (int i = 0; i < n_values; i++) {
+		printf("%f, ", values[i]);
+	}
+	printf("]\n");
+}
+
+
+
+
 void test_draw_gaussian() {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
@@ -104,11 +115,30 @@ void test_draw_linear_regression() {
 }
 
 
+void test_softmax() {
+	int n_values = 15;
+	double values[n_values];
+	for (int i = 0; i < n_values; i++) {
+		values[i] = normal();
+	}
+	print_doubles(values, n_values);
+	softmax(values, n_values);
+	print_doubles(values, n_values);
+	double sum_p = 0.0;
+	for (int i = 0; i < n_values; i++) {
+		sum_p += values[i];
+	}
+	printf("Total: %f\n", sum_p);	
+}
+
+
 int main(void) {
 	srand(time(NULL));
 	// test_draw_gaussian();
 	// test_draw_gaussian_mixture();
-	test_draw_linear_regression();
+	// test_draw_linear_regression();
+
+	test_softmax();
 
 	return 0;
 }
