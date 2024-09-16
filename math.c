@@ -54,9 +54,9 @@ double normal() {
 
 
 // Computes the safe softmax of values[] inplace.
-// NOTE: This is a slow version of softmax which uses 3 loads/stores.
-// It's mostly here to contrast with the fast, online version below
-// which only uses 2 loads / stores.
+// NOTE: This is a slow version of softmax which uses 3 loads from memory.
+// It's mostly here to contrast with the fast, online version below which 
+// uses only 2 loads.
 void softmax_slow(double values[], int n_values) {
     double max_value = max(values, n_values);
 
