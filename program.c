@@ -13,8 +13,6 @@ void print_doubles(double values[], int n_values) {
 }
 
 
-
-
 void test_draw_gaussian() {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* window = SDL_CreateWindow(
