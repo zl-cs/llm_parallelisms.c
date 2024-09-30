@@ -47,7 +47,6 @@ void HashMap_insert(HashMap* map, char* key, int value) {
     while (*current) {
         if (strcmp((*current)->key, key) == 0) {
             (*current)->value = value;
-            // printf("found node %d as (%d, %d)\n", map->size, idx, i);
             return;
         }
         i += 1;
@@ -56,12 +55,11 @@ void HashMap_insert(HashMap* map, char* key, int value) {
 
     // Node was not found, insert a new one.
     HashNode* node = (HashNode*) malloc(sizeof(HashNode));
-    node->key = malloc(strlen(key) + 1);
+    node->key = malloc(strlen(key) + 1);  // +1 to account for '\0'.
     strcpy(node->key, key);
     node->value = value;
     node->next = NULL;
     *current = node;
-    // printf("insert node %d as (%d, %d)\n", map->size, idx, i);
     map->size += 1;
 }
 
@@ -81,29 +79,45 @@ int HashMap_get(HashMap* map, char* key) {
 
 
 int main(void) {
-
     FILE* file = fopen("data/tiny_shakespear.txt", "r");
     if (file == NULL) {
         perror("Failed to open file");
         return 1;
     }
 
-    // Tokenize file.
-    HashMap* map = HashMap_create(32768);
+    // Create vocabulary.
+    HashMap* vocabulary = HashMap_create(32768);
     int buffer_size = 1024;
     char buffer[buffer_size];
     int i = 0;
     while (fgets(buffer, buffer_size, file)) {
-        HashMap_insert(map, buffer, 1);
-        char *token; 
+        char* token; 
         token = strtok(buffer, " ");
         while (token != NULL) {
-            HashMap_insert(map, token, 1);
+            if (HashMap_get(vocabulary, token) < 0) {
+                HashMap_insert(vocabulary, token, vocabulary->size);
+            }
             token = strtok(NULL, " ");
         }
     }
+    printf("Vocabulary size: %d\n", vocabulary->size);
 
-    printf("Map size: %d\n", map->size);
+    // Example vector.
+    int vector[vocabulary->size];
+    memset(vector, 0, sizeof(vector));
+
+    char str[] = "MARCIUS:\nSay, has our general met the enemy?\nMessenger:\nThey lie in view; but have not spoke as yet. have have have";
+    char* token; 
+    token = strtok(str, " ");
+    while (token != NULL) {
+        int idx = HashMap_get(vocabulary, token);
+        if (idx > 0) {
+            vector[idx] += 1;
+        }
+       token = strtok(NULL, " ");
+    }
+
+    printf("%d\n", vector[HashMap_get(vocabulary, "have")]);
 
     fclose(file);
 	return 0;
