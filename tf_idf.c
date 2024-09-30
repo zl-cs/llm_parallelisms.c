@@ -78,6 +78,57 @@ int HashMap_get(HashMap* map, char* key) {
 }
 
 
+typedef struct {
+    int* idxs;
+    float* values;
+    int size;
+    int max_size_;
+} SparseVector;
+
+
+SparseVector* SparseVector_create(int max_size) {
+    int* idxs = (int*)malloc(max_size * sizeof(int));
+    float* values = (float*)malloc(max_size * sizeof(float));
+    SparseVector* vec = (SparseVector*)malloc(sizeof(SparseVector));
+    vec->idxs= idxs;
+    vec->values = values;
+    vec->size = 0;
+    vec->max_size_ = max_size;
+    return vec;
+}
+
+
+void SparseVector_push(SparseVector* vec, int idx, float value) {
+    // Increase the vector size if needed.
+    if (vec->size == vec->max_size_) {
+        int new_max_size = 2 * vec->max_size_;
+        vec->idxs = realloc(vec->idxs, new_max_size * sizeof(int));
+        vec->values = realloc(vec->values, new_max_size * sizeof(float));
+        vec->max_size_ = new_max_size;
+    }
+    vec->idxs[vec->size] = idx;
+    vec->values[vec->size] = value;
+    vec->size += 1;
+}
+
+
+float dot(SparseVector* left, SparseVector* right) {
+    float result = 0.0;
+    int left_idx = 0, right_idx = 0;
+    while (left_idx < left->size && right_idx < right->size) {
+        if (left->idxs[left_idx] == right->idxs[right_idx]) {
+            result += left->values[left_idx] * right->values[right_idx];
+            left_idx += 1; right_idx += 1;
+        } else if (left->idxs[left_idx] < right->idxs[right_idx]) {
+            left_idx += 1;
+        } else {
+            right_idx += 1;
+        }
+    }
+    return result;
+}
+
+
 int main(void) {
     FILE* file = fopen("data/tiny_shakespear.txt", "r");
     if (file == NULL) {
@@ -103,21 +154,21 @@ int main(void) {
     printf("Vocabulary size: %d\n", vocabulary->size);
 
     // Example vector.
-    int vector[vocabulary->size];
-    memset(vector, 0, sizeof(vector));
-
+    SparseVector* v1 = SparseVector_create(1024);
+    SparseVector* v2 = SparseVector_create(1024);
     char str[] = "MARCIUS:\nSay, has our general met the enemy?\nMessenger:\nThey lie in view; but have not spoke as yet. have have have";
     char* token; 
     token = strtok(str, " ");
     while (token != NULL) {
         int idx = HashMap_get(vocabulary, token);
         if (idx > 0) {
-            vector[idx] += 1;
+            SparseVector_push(v1, idx, 1.0);
+            SparseVector_push(v2, idx, 1.0);
         }
        token = strtok(NULL, " ");
     }
 
-    printf("%d\n", vector[HashMap_get(vocabulary, "have")]);
+    printf("%f\n", dot(v1, v2));
 
     fclose(file);
 	return 0;
