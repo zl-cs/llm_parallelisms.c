@@ -129,6 +129,33 @@ float dot(SparseVector* left, SparseVector* right) {
 }
 
 
+typedef struct {
+    int idx;
+    float score;
+} Score;
+
+
+int score_cmp(const void* left, const void* right) {
+    return -(int)(((Score*)left)->score - ((Score*)right)->score);
+}
+
+
+// Scores the query against all documents.
+// score_buffer is expected to be an array of Scores with size n_documents.
+// When the function returns, Scores will be sorted by dot(query, document) score.
+void score_and_sort(
+    SparseVector* query, 
+    SparseVector* documents[], 
+    int n_documents, 
+    Score* score_buffer) {
+    for (int i = 0; i < n_documents; i++) {
+        score_buffer[i].idx = i; 
+        score_buffer[i].score = dot(query, documents[i]);
+    }
+    qsort(score_buffer, n_documents, sizeof(Score), score_cmp);
+}
+
+
 int main(void) {
     FILE* file = fopen("data/tiny_shakespear.txt", "r");
     if (file == NULL) {
@@ -140,7 +167,6 @@ int main(void) {
     HashMap* vocabulary = HashMap_create(32768);
     int buffer_size = 1024;
     char buffer[buffer_size];
-    int i = 0;
     while (fgets(buffer, buffer_size, file)) {
         char* token; 
         token = strtok(buffer, " ");
@@ -153,23 +179,36 @@ int main(void) {
     }
     printf("Vocabulary size: %d\n", vocabulary->size);
 
-    // Example vector.
-    SparseVector* v1 = SparseVector_create(1024);
-    SparseVector* v2 = SparseVector_create(1024);
-    char str[] = "MARCIUS:\nSay, has our general met the enemy?\nMessenger:\nThey lie in view; but have not spoke as yet. have have have";
-    char* token; 
-    token = strtok(str, " ");
-    while (token != NULL) {
-        int idx = HashMap_get(vocabulary, token);
-        if (idx > 0) {
-            SparseVector_push(v1, idx, 1.0);
-            SparseVector_push(v2, idx, 1.0);
+
+    // Chunk and embed text. 
+    // For now, each line is a separate chunk.
+    rewind(file);
+    int n_chunks = 40000;
+    SparseVector* vectors[n_chunks];
+    int i = 0;
+    while (fgets(buffer, buffer_size, file)) {
+        SparseVector* vec = SparseVector_create(128);
+        char* token; 
+        token = strtok(buffer, " ");
+        while (token != NULL) {
+            int idx = HashMap_get(vocabulary, token);
+            if (idx > 0) {
+                SparseVector_push(vec, idx, 1.0);
+            }
+            token = strtok(NULL, " ");
         }
-       token = strtok(NULL, " ");
+        vectors[i] = vec;
+        i += 1;
     }
-
-    printf("%f\n", dot(v1, v2));
-
     fclose(file);
+
+    Score* scores = (Score*) malloc(n_chunks * sizeof(Score));
+    score_and_sort(vectors[1], vectors, n_chunks, scores);
+
+    printf("%d, %f\n", scores[0].idx, scores[0].score);
+    printf("%d, %f\n", scores[1].idx, scores[1].score);
+    printf("%d, %f\n", scores[2].idx, scores[2].score);
+    printf("%d, %f\n", scores[3].idx, scores[3].score);
+
 	return 0;
 }
