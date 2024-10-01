@@ -145,7 +145,7 @@ float dot(HashMap* left, HashMap* right) {
     HashMapIterator* iter = HashMapIterator_create(left);
     HashNode* node = HashMapIterator_next(iter);
     while (node) {
-        float right_val = HashMapIterator_get_float(right, node->key);
+        float right_val = HashMap_get_float(right, node->key);
         if (right_val > 0) {
             result += node->float_value * right_val;
         }
@@ -221,7 +221,8 @@ int main(void) {
         while (token) {
             int idx = HashMap_get_int(vocabulary, token);
             if (idx >= 0) {
-                HashMap_insert(vec, token, idx, HashMap_get_float(vec, token) + 1.0);
+                float value = HashMap_get_float(vec, token);
+                HashMap_insert(vec, token, idx, 1.0 ? value < 0 : value + 1.0);
             }
             token = strtok(NULL, " ");
         }
