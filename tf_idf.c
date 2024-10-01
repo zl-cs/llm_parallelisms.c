@@ -16,7 +16,8 @@ unsigned long djb2(char* str) {
 
 typedef struct HashNode {
     char* key;
-    int value;
+    int int_value;
+    float float_value;
     struct HashNode* next; 
 } HashNode;
 
@@ -38,7 +39,7 @@ HashMap* HashMap_create(int max_size) {
 }
 
 
-void HashMap_insert(HashMap* map, char* key, int value) {
+void HashMap_insert(HashMap* map, char* key, int int_value, float float_value) {
     int idx = djb2(key) % map->max_size_;
 
     int i = 0;
@@ -46,7 +47,8 @@ void HashMap_insert(HashMap* map, char* key, int value) {
     HashNode** current = &map->nodes[idx];
     while (*current) {
         if (strcmp((*current)->key, key) == 0) {
-            (*current)->value = value;
+            (*current)->int_value = int_value;
+            (*current)->float_value = float_value;
             return;
         }
         i += 1;
@@ -57,24 +59,39 @@ void HashMap_insert(HashMap* map, char* key, int value) {
     HashNode* node = (HashNode*) malloc(sizeof(HashNode));
     node->key = malloc(strlen(key) + 1);  // +1 to account for '\0'.
     strcpy(node->key, key);
-    node->value = value;
+    node->int_value = int_value;
+    node->float_value = float_value;
     node->next = NULL;
     *current = node;
     map->size += 1;
 }
 
 
-int HashMap_get(HashMap* map, char* key) {
+int HashMap_get_int(HashMap* map, char* key) {
     int idx = djb2(key) % map->max_size_;
 
     HashNode* current = map->nodes[idx];
     while (current != NULL) {
         if (strcmp(current->key, key) == 0) {
-            return current->value;
+            return current->int_value;
         }
         current = current->next; 
     }
     return -1; 
+}
+
+
+float HashMap_get_float(HashMap* map, char* key) {
+    int idx = djb2(key) % map->max_size_;
+
+    HashNode* current = map->nodes[idx];
+    while (current != NULL) {
+        if (strcmp(current->key, key) == 0) {
+            return current->float_value;
+        }
+        current = current->next; 
+    }
+    return -1.0; 
 }
 
 
@@ -121,53 +138,20 @@ HashNode* HashMapIterator_next(HashMapIterator* iter) {
 }
 
 
-typedef struct {
-    int* idxs;
-    float* values;
-    int size;
-    int max_size_;
-} SparseVector;
-
-
-SparseVector* SparseVector_create(int max_size) {
-    int* idxs = (int*)malloc(max_size * sizeof(int));
-    float* values = (float*)malloc(max_size * sizeof(float));
-    SparseVector* vec = (SparseVector*)malloc(sizeof(SparseVector));
-    vec->idxs= idxs;
-    vec->values = values;
-    vec->size = 0;
-    vec->max_size_ = max_size;
-    return vec;
-}
-
-
-void SparseVector_push(SparseVector* vec, int idx, float value) {
-    // Increase the vector size if needed.
-    if (vec->size == vec->max_size_) {
-        int new_max_size = 2 * vec->max_size_;
-        vec->idxs = realloc(vec->idxs, new_max_size * sizeof(int));
-        vec->values = realloc(vec->values, new_max_size * sizeof(float));
-        vec->max_size_ = new_max_size;
-    }
-    vec->idxs[vec->size] = idx;
-    vec->values[vec->size] = value;
-    vec->size += 1;
-}
-
-
-float dot(SparseVector* left, SparseVector* right) {
+// TODO(eugen): This function does a malloc/free in each call. Consider
+// passing in a HashMapIterator instead.
+float dot(HashMap* left, HashMap* right) {
     float result = 0.0;
-    int left_idx = 0, right_idx = 0;
-    while (left_idx < left->size && right_idx < right->size) {
-        if (left->idxs[left_idx] == right->idxs[right_idx]) {
-            result += left->values[left_idx] * right->values[right_idx];
-            left_idx += 1; right_idx += 1;
-        } else if (left->idxs[left_idx] < right->idxs[right_idx]) {
-            left_idx += 1;
-        } else {
-            right_idx += 1;
+    HashMapIterator* iter = HashMapIterator_create(left);
+    HashNode* node = HashMapIterator_next(iter);
+    while (node) {
+        float right_val = HashMapIterator_get_float(right, node->key);
+        if (right_val > 0) {
+            result += node->float_value * right_val;
         }
+        node = HashMapIterator_next(iter);
     }
+    free(iter);
     return result;
 }
 
@@ -187,8 +171,8 @@ int score_cmp(const void* left, const void* right) {
 // score_buffer is expected to be an array of Scores with size n_documents.
 // When the function returns, Scores will be sorted by dot(query, document) score.
 void score_and_sort(
-    SparseVector* query, 
-    SparseVector* documents[], 
+    HashMap* query, 
+    HashMap* documents[], 
     int n_documents, 
     Score* score_buffer) {
     for (int i = 0; i < n_documents; i++) {
@@ -214,8 +198,8 @@ int main(void) {
         char* token; 
         token = strtok(buffer, " ");
         while (token != NULL) {
-            if (HashMap_get(vocabulary, token) < 0) {
-                HashMap_insert(vocabulary, token, vocabulary->size);
+            if (HashMap_get_int(vocabulary, token) < 0) {
+                HashMap_insert(vocabulary, token, vocabulary->size, -1.0);
             }
             token = strtok(NULL, " ");
         }
@@ -235,9 +219,9 @@ int main(void) {
         char* token; 
         token = strtok(buffer, " ");
         while (token) {
-            int idx = HashMap_get(vocabulary, token);
+            int idx = HashMap_get_int(vocabulary, token);
             if (idx >= 0) {
-                HashMap_insert(vec, token, 1);
+                HashMap_insert(vec, token, idx, HashMap_get_float(vec, token) + 1.0);
             }
             token = strtok(NULL, " ");
         }
