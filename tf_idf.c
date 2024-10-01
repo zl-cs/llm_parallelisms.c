@@ -79,6 +79,49 @@ int HashMap_get(HashMap* map, char* key) {
 
 
 typedef struct {
+    HashMap* map;
+    int idx;
+    HashNode* next;
+
+} HashMapIterator;
+
+
+HashMapIterator* HashMapIterator_create(HashMap* map) {
+    HashMapIterator* iter = (HashMapIterator*)malloc(sizeof(HashMapIterator));
+    iter->map = map;
+    iter->idx = -1;
+    iter->next = NULL;
+    return iter;
+}
+
+
+HashNode* HashMapIterator_next(HashMapIterator* iter) {
+    // First try to get the next item in the hash bucket.
+    if (iter->next && iter->next->next) {
+        iter->next = iter->next->next;
+        return iter->next;
+    }
+
+    // If no such item exists, keep iterating over the hash buckets
+    // to find the next item.
+    iter->idx += 1;
+    while (iter->idx <= iter->map->max_size_ && !iter->map->nodes[iter->idx]) {
+        iter->idx += 1;
+    }
+
+    // If we went outside the HashMap, this means there were no more items
+    // and we just return NULL.
+    if (iter->idx >= iter->map->max_size_) {
+        return NULL;
+    }
+
+    // Otherwise return the next item we found.
+    iter->next = iter->map->nodes[iter->idx];
+    return iter->next;
+}
+
+
+typedef struct {
     int* idxs;
     float* values;
     int size;
@@ -184,31 +227,25 @@ int main(void) {
     // For now, each line is a separate chunk.
     rewind(file);
     int n_chunks = 40000;
-    SparseVector* vectors[n_chunks];
+    HashMap* vectors[n_chunks];
     int i = 0;
     while (fgets(buffer, buffer_size, file)) {
-        SparseVector* vec = SparseVector_create(128);
+        HashMap* vec = HashMap_create(32);
+
         char* token; 
         token = strtok(buffer, " ");
-        while (token != NULL) {
+        while (token) {
             int idx = HashMap_get(vocabulary, token);
-            if (idx > 0) {
-                SparseVector_push(vec, idx, 1.0);
+            if (idx >= 0) {
+                HashMap_insert(vec, token, 1);
             }
             token = strtok(NULL, " ");
         }
+
         vectors[i] = vec;
         i += 1;
     }
     fclose(file);
-
-    Score* scores = (Score*) malloc(n_chunks * sizeof(Score));
-    score_and_sort(vectors[1], vectors, n_chunks, scores);
-
-    printf("%d, %f\n", scores[0].idx, scores[0].score);
-    printf("%d, %f\n", scores[1].idx, scores[1].score);
-    printf("%d, %f\n", scores[2].idx, scores[2].score);
-    printf("%d, %f\n", scores[3].idx, scores[3].score);
 
 	return 0;
 }
