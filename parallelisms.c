@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <mpi.h>
+#include "math.c"
 
 
 typedef struct {
@@ -95,6 +96,33 @@ void relu_backward(int size, float* input, float* d_input) {
     for (int i = 0; i < size; i++) {
         d_input[i] = input[i] > 0 ? 1.0f : 0.0f;
     }
+}
+
+
+void softmax(float* input, int n_rows, int n_cols) {
+    for (int row = 0; row < n_rows; row ++) {
+        // Find the max value of the row.
+        float max_value = -INFINITY;
+        float Z = 0;
+        for (int col = 0; col < n_cols; col ++) {
+            int idx = row * n_rows + col;
+            float prev_max = max_value;
+            max_value = input[idx] > max_value ? input[idx] : max_value;
+            Z *= exp(prev_max - max_value);
+            Z += exp(input[idx] - max_value);
+        }
+        // Compute stable softmax.
+        for (int col = 0; col < n_cols; col++) {
+            int idx = row * n_rows + col;
+            input[idx] = exp(input[idx] - max_value) / Z;
+        }
+    }
+}
+
+
+void softmax_backward(float* input, int n_rows, int n_cols, float* d_input) {
+    // TODO(eugen): implement
+    return;
 }
 
 
