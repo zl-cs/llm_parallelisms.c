@@ -44,27 +44,42 @@ void Linear_forward(Linear* self, int batch_size, float* input, float* output) {
 }
 
 
-void Linear_backward(Linear* self, int batch_size, float* input, float* d_input, float* d_output) {
+void Linear_backward(Linear* self, int batch_size, float* input, float* d_output, float* d_input) {
     // dL/dX = dL/dY @ W.T 
     for (int b = 0; b < batch_size; b++) {
-        // TOOD(eugen): implement.
-        continue;
+        for (int i = 0; i < self->in_features; i++) {
+            float sum = 0.0f;
+            for (int o = 0; o < self->out_features; o++) {
+                int d_output_idx = b * self->out_features + o;
+                int weight_idx = i * self->out_features + o;
+                sum += d_output[d_output_idx] * self->weight[weight_idx];
+            }
+            d_input[b * self->in_features + i] = sum;
+        }
     }
 
     // dL/dW = X.T @ dL/dY
-    for (int b = 0; b < batch_size; b++) {
-        // TODO(eugen): implement.
-        continue;
+    for (int i = 0; i < self->in_features; i++) {
+        for (int o = 0; o < self->out_features; o++) {
+            float sum = 0.0f;
+            for (int b = 0; b < batch_size; b++) {
+                int input_idx = b * self->in_features + i;
+                int d_output_idx = b * self->out_features + o;
+                sum += input[input_idx] * d_output[d_output_idx];
+            }
+            self->d_weight[i * self->out_features + o] = sum;
+        }
     }
 
-
-    // dL/db = dL/dY @ 1
-    for (int row = 0; row < batch_size; row++) {
+    // TODO(eugen): This might be more efficient to above with the dL/dW calculation
+    // since the memory is already loaded.
+    // dL/db = 1 @ dL/dY
+    for (int o = 0; o < self->out_features; o++) {
         float sum = 0.0f;
-        for (int col = 0; col < self->out_features; col++) {
-            sum += d_output[row * self->out_features + col];
+        for (int b = 0; b < batch_size; b++) {
+            sum += d_output[b * self->out_features + o];
         }
-        self->d_bias[row] = sum;
+        self->d_bias[o] = sum;
     }
 }
 
