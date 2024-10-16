@@ -1,6 +1,6 @@
 # Custom items.
 SDL2.framework/
-weights/
+dump/
 .vscode/
 .DS_Store
 .env

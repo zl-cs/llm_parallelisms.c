@@ -173,12 +173,32 @@ int main(int argc, char** argv) {
     MPI_Finalize();
 
     if (world_rank == 0) {
-        Linear* fc_1 = Linear_create(30, 50);
-        Linear* fc_2 = Linear_create(50, 10);
-        dump_tensor("weights/fc_1.w", fc_1->weight, fc_1->in_features * fc_1->out_features);
-        dump_tensor("weights/fc_1.b", fc_1->bias, fc_1->out_features);
-        dump_tensor("weights/fc_2.w", fc_2->weight, fc_2->in_features * fc_2->out_features);
-        dump_tensor("weights/fc_2.b", fc_2->bias, fc_2->out_features);
+        int batch_size = 5;
+        int emb_size = 30;
+        int vocab_size = 10;
+
+        // Input.
+        float* input = malloc(sizeof(float) * batch_size * emb_size);
+        for (int i = 0; i < batch_size * emb_size; i++) {
+            input[i] = he_init(1.0);
+        }
+        dump_tensor("dump/input", input, batch_size * emb_size);
+
+        // Weights + biases.
+        Linear* fc_1 = Linear_create(emb_size, 50);
+        Linear* fc_2 = Linear_create(50, vocab_size);
+        dump_tensor("dump/fc_1.w", fc_1->weight, fc_1->in_features * fc_1->out_features);
+        dump_tensor("dump/fc_1.b", fc_1->bias, fc_1->out_features);
+        dump_tensor("dump/fc_2.w", fc_2->weight, fc_2->in_features * fc_2->out_features);
+        dump_tensor("dump/fc_2.b", fc_2->bias, fc_2->out_features);
+
+        // Activations.
+        float* fc_1_out = malloc(sizeof(float) * batch_size * 50);
+        Linear_forward(fc_1, batch_size, input, fc_1_out);
+        dump_tensor("dump/fc_1.out", fc_1_out, batch_size * 50);
+        relu(fc_1_out, batch_size * 50);
+        dump_tensor("dump/fc_1.relu", fc_1_out, batch_size * 50);
+
     }
 
     return 0;
