@@ -147,17 +147,27 @@ float cross_entropy_loss(float* probs, int* targets, int batch_size, int vocab_s
         int idx = b * vocab_size + targets[b];
         loss += log(probs[idx]);
     }
-    return loss / batch_size;
+    return -(loss / batch_size);
 }
 
 
-void dump_tensor(const char* filename, float* tensor, int size) {
+void dump_float_tensor(const char* filename, float* tensor, int size) {
     FILE* file = fopen(filename, "wb");
     if (file == NULL) {
         printf("Error opening file!\n");
         return;
     }
     fwrite(tensor, sizeof(float), size, file);
+}
+
+
+void dump_int_tensor(const char* filename, int* tensor, int size) {
+    FILE* file = fopen(filename, "wb");
+    if (file == NULL) {
+        printf("Error opening file!\n");
+        return;
+    }
+    fwrite(tensor, sizeof(int), size, file);
 }
 
 
@@ -175,6 +185,7 @@ int main(int argc, char** argv) {
     if (world_rank == 0) {
         int batch_size = 5;
         int emb_size = 30;
+        int hidden_size = 500;
         int vocab_size = 10;
 
         // Input.
@@ -182,22 +193,39 @@ int main(int argc, char** argv) {
         for (int i = 0; i < batch_size * emb_size; i++) {
             input[i] = he_init(1.0);
         }
-        dump_tensor("dump/input", input, batch_size * emb_size);
+        dump_float_tensor("dump/input", input, batch_size * emb_size);
+
+        // Output.
+        int* target = malloc(sizeof(int) * batch_size);
+        for (int i = 0; i < batch_size; i++) {
+            target[i] = rand() % vocab_size;
+        }
+        dump_int_tensor("dump/target", target, batch_size);
 
         // Weights + biases.
-        Linear* fc_1 = Linear_create(emb_size, 50);
-        Linear* fc_2 = Linear_create(50, vocab_size);
-        dump_tensor("dump/fc_1.w", fc_1->weight, fc_1->in_features * fc_1->out_features);
-        dump_tensor("dump/fc_1.b", fc_1->bias, fc_1->out_features);
-        dump_tensor("dump/fc_2.w", fc_2->weight, fc_2->in_features * fc_2->out_features);
-        dump_tensor("dump/fc_2.b", fc_2->bias, fc_2->out_features);
+        Linear* fc_1 = Linear_create(emb_size, hidden_size);
+        Linear* fc_2 = Linear_create(hidden_size, vocab_size);
+        dump_float_tensor("dump/fc_1.w", fc_1->weight, fc_1->in_features * fc_1->out_features);
+        dump_float_tensor("dump/fc_1.b", fc_1->bias, fc_1->out_features);
+        dump_float_tensor("dump/fc_2.w", fc_2->weight, fc_2->in_features * fc_2->out_features);
+        dump_float_tensor("dump/fc_2.b", fc_2->bias, fc_2->out_features);
 
         // Activations.
-        float* fc_1_out = malloc(sizeof(float) * batch_size * 50);
+        float* fc_1_out = malloc(sizeof(float) * batch_size * hidden_size);
         Linear_forward(fc_1, batch_size, input, fc_1_out);
-        dump_tensor("dump/fc_1.out", fc_1_out, batch_size * 50);
-        relu(fc_1_out, batch_size * 50);
-        dump_tensor("dump/fc_1.relu", fc_1_out, batch_size * 50);
+        dump_float_tensor("dump/fc_1.out", fc_1_out, batch_size * hidden_size);
+        relu(fc_1_out, batch_size * hidden_size);
+        dump_float_tensor("dump/fc_1.relu", fc_1_out, batch_size * hidden_size);
+
+        float* fc_2_out = malloc(sizeof(float) * batch_size * vocab_size);
+        Linear_forward(fc_2, batch_size, fc_1_out, fc_2_out);
+        dump_float_tensor("dump/fc_2.out", fc_2_out, batch_size * vocab_size);
+
+        softmax(fc_2_out, batch_size, vocab_size);
+        dump_float_tensor("dump/fc_2.softmax", fc_2_out, batch_size * vocab_size);
+
+        float loss = cross_entropy_loss(fc_2_out, target, batch_size, vocab_size);
+        printf("Loss: %f\n", loss);
 
     }
 
