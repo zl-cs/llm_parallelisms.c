@@ -141,13 +141,27 @@ void softmax(float* input, int batch_size, int vocab_size) {
 }
 
 
-float cross_entropy_loss(float* probs, int* targets, int batch_size, int vocab_size) {
+float cross_entropy_loss(float* probs, int* target, int batch_size, int vocab_size) {
     float loss = 0.0f;
     for (int b = 0; b < batch_size; b++) {
-        int idx = b * vocab_size + targets[b];
+        int idx = b * vocab_size + target[b];
         loss += log(probs[idx]);
     }
     return -(loss / batch_size);
+}
+
+
+void cross_entropy_softmax_backward(
+    float* probs, int* target, int batch_size, int vocab_size, float* d_logits
+) {
+    float d_loss = 1.0 / batch_size;
+    for (int b = 0; b < batch_size; b++) {
+        for (int v = 0; v < vocab_size; v++) {
+            int idx = b * vocab_size + v;
+            int indicator = v == target[b] ? 1.0f : 0.0f;
+            d_logits[idx] += d_loss * (probs[idx] - indicator);
+        }
+    }
 }
 
 
@@ -188,21 +202,21 @@ int main(int argc, char** argv) {
         int hidden_size = 500;
         int vocab_size = 10;
 
-        // Input.
+        // Create input.
         float* input = malloc(sizeof(float) * batch_size * emb_size);
         for (int i = 0; i < batch_size * emb_size; i++) {
             input[i] = he_init(1.0);
         }
         dump_float_tensor("dump/input", input, batch_size * emb_size);
 
-        // Output.
+        // Create output.
         int* target = malloc(sizeof(int) * batch_size);
         for (int i = 0; i < batch_size; i++) {
             target[i] = rand() % vocab_size;
         }
         dump_int_tensor("dump/target", target, batch_size);
 
-        // Weights + biases.
+        // Create network.
         Linear* fc_1 = Linear_create(emb_size, hidden_size);
         Linear* fc_2 = Linear_create(hidden_size, vocab_size);
         dump_float_tensor("dump/fc_1.w", fc_1->weight, fc_1->in_features * fc_1->out_features);
@@ -210,7 +224,7 @@ int main(int argc, char** argv) {
         dump_float_tensor("dump/fc_2.w", fc_2->weight, fc_2->in_features * fc_2->out_features);
         dump_float_tensor("dump/fc_2.b", fc_2->bias, fc_2->out_features);
 
-        // Activations.
+        // ========= Forward Pass =========
         float* fc_1_out = malloc(sizeof(float) * batch_size * hidden_size);
         Linear_forward(fc_1, batch_size, input, fc_1_out);
         dump_float_tensor("dump/fc_1.out", fc_1_out, batch_size * hidden_size);
@@ -227,6 +241,9 @@ int main(int argc, char** argv) {
         float loss = cross_entropy_loss(fc_2_out, target, batch_size, vocab_size);
         printf("Loss: %f\n", loss);
 
+        // ========= Backward Pass =========
+        float* d_logits = calloc(sizeof(float), batch_size * vocab_size);
+        cross_entropy_softmax_backward(fc_2_out, target, batch_size, vocab_size, d_logits);
     }
 
     return 0;
