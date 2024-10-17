@@ -125,6 +125,56 @@ void Linear_backward(Linear* self, Activation* input, Activation* output) {
 }
 
 
+typedef struct {
+    int vocab_size;
+    int emb_size;
+    float* embedding;
+    float* d_embedding;
+} Embedding;
+
+
+Embedding* Embedding_create(int vocab_size, int emb_size) {
+    float* embedding = malloc(sizeof(float) * vocab_size * emb_size);
+    float* d_embedding = malloc(sizeof(float) * vocab_size * emb_size);
+    float k = 1.0f / (float)emb_size;
+    for (int i = 0; i < vocab_size * emb_size; i++) {
+        embedding[i] = he_init(k);
+        d_embedding[i] = 0.0f;
+    }
+ 
+    Embedding* self = malloc(sizeof(Embedding));
+    self->vocab_size = vocab_size;
+    self->emb_size = emb_size;
+    self->embedding = embedding;
+    self->d_embedding = d_embedding;
+    return self;
+}
+
+
+void Embedding_forward(Embedding* self, int* idxs, Activation* output) {
+    for (int b = 0; b < output->batch_size; b++) {
+        for (int i = 0; i < output->features; i++) {
+            int out_idx = b * output->features + i;
+            int emb_idx = idxs[b] * output->features + i;
+            output->value[out_idx] = self->embedding[emb_idx];
+        }
+    }
+}
+
+
+// TODO(eugen): Keeping a d_embedding is not actually necessary and wastes memory. 
+// All we need to do is route the gradient of the input back into the embedding table.
+void Embedding_backward(Embedding* self, int* idxs, Activation* output) {
+    for (int b = 0; b < output->batch_size; b++) {
+        for (int i = 0; i < output->features; i++) {
+            int emb_idx = idxs[b] * output->features + i;
+            int out_idx = b * output->features + i;
+            self->d_embedding[emb_idx] = output->d_value[out_idx];
+        }
+    }
+}
+
+
 void relu(Activation* input, Activation* output) {
     for (int i = 0; i < Activation_numel(input); i++) {
         output->value[i] = input->value[i] > 0 ? input->value[i] : 0.0f;

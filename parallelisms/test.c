@@ -28,30 +28,27 @@ int main(int argc, char** argv) {
     int hidden_size = 500;
     int vocab_size = 10;
 
-    // Create input.
-    Activation* input = Activation_create(batch_size, emb_size);
-    for (int i = 0; i < batch_size * emb_size; i++) {
-        input->value[i] = he_init(1.0);
-    }
-
-    // Create output.
+    // Create input/output.
     int* target = malloc(sizeof(int) * batch_size);
     for (int i = 0; i < batch_size; i++) {
         target[i] = rand() % vocab_size;
     }
 
     // Create network.
+    Embedding* wte = Embedding_create(vocab_size, emb_size);
     Linear* fc_1 = Linear_create(emb_size, hidden_size);
     Linear* fc_2 = Linear_create(hidden_size, vocab_size);
 
     // Create activations.
+    Activation* wte_out = Activation_create(batch_size, emb_size);
     Activation* fc_1_out = Activation_create(batch_size, hidden_size);
     Activation* relu_out = Activation_create(batch_size, hidden_size);
     Activation* fc_2_out = Activation_create(batch_size, vocab_size);
     Activation* softmax_out = Activation_create(batch_size, vocab_size);
 
     // ========= Forward Pass =========
-    Linear_forward(fc_1, input, fc_1_out);
+    Embedding_forward(wte, target, wte_out);
+    Linear_forward(fc_1, wte_out, fc_1_out);
     relu(fc_1_out, relu_out);
     Linear_forward(fc_2, relu_out, fc_2_out);
     softmax(fc_2_out, softmax_out);
@@ -62,11 +59,12 @@ int main(int argc, char** argv) {
     cross_entropy_softmax_backward(softmax_out, fc_2_out, target);
     Linear_backward(fc_2, relu_out, fc_2_out);
     relu_backward(fc_1_out, relu_out);
-    Linear_backward(fc_1, input, fc_1_out);
+    Linear_backward(fc_1, wte_out, fc_1_out);
+    Embedding_backward(wte, target, wte_out);
 
     // Dump weights, gradients, activations for PyTorch check.
-    dump_float_tensor("dump/input", input->value, batch_size * emb_size);
     dump_int_tensor("dump/target", target, batch_size);
+    dump_float_tensor("dump/wte", wte->embedding, vocab_size * emb_size);
     dump_float_tensor("dump/fc_1.w", fc_1->weight, fc_1->in_features * fc_1->out_features);
     dump_float_tensor("dump/fc_1.b", fc_1->bias, fc_1->out_features);
     dump_float_tensor("dump/fc_2.w", fc_2->weight, fc_2->in_features * fc_2->out_features);
@@ -75,6 +73,8 @@ int main(int argc, char** argv) {
     dump_float_tensor("dump/fc_2.d_b", fc_2->d_bias, fc_2->out_features);
     dump_float_tensor("dump/fc_1.d_w", fc_1->d_weight, fc_1->in_features * fc_1->out_features);
     dump_float_tensor("dump/fc_1.d_b", fc_1->d_bias, fc_1->out_features);
+    dump_float_tensor("dump/d_wte", wte->d_embedding, vocab_size * emb_size);
+    dump_float_tensor("dump/wte.out", wte_out->value, Activation_numel(wte_out));
     dump_float_tensor("dump/fc_1.out", fc_1_out->value, Activation_numel(fc_1_out));
     dump_float_tensor("dump/fc_1.relu", relu_out->value, Activation_numel(relu_out));
     dump_float_tensor("dump/fc_2.out", fc_2_out->value, Activation_numel(fc_2_out));
