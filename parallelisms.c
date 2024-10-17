@@ -152,9 +152,9 @@ float cross_entropy_loss(float* probs, int* target, int batch_size, int vocab_si
 
 
 void cross_entropy_softmax_backward(
-    float* probs, int* target, int batch_size, int vocab_size, float* d_logits
+    float* probs, int* target, float* d_logits, int batch_size, int vocab_size
 ) {
-    float d_loss = 1.0 / batch_size;
+    float d_loss = 1.0f / batch_size;
     for (int b = 0; b < batch_size; b++) {
         for (int v = 0; v < vocab_size; v++) {
             int idx = b * vocab_size + v;
@@ -245,8 +245,19 @@ int main(int argc, char** argv) {
         printf("Loss: %f\n", loss);
 
         // ========= Backward Pass =========
-        float* d_logits = calloc(sizeof(float), batch_size * vocab_size);
-        cross_entropy_softmax_backward(fc_2_out, target, batch_size, vocab_size, d_logits);
+        float* d_fc_2_out = calloc(sizeof(float), batch_size * vocab_size);
+        cross_entropy_softmax_backward(softmax_out, target, d_fc_2_out, batch_size, vocab_size);
+        float* d_relu_out = calloc(sizeof(float), batch_size * hidden_size);
+        Linear_backward(fc_2, relu_out, d_relu_out, d_fc_2_out, batch_size);
+        dump_float_tensor("dump/fc_2.d_w", fc_2->d_weight, fc_2->in_features * fc_2->out_features);
+        dump_float_tensor("dump/fc_2.d_b", fc_2->d_bias, fc_2->out_features);
+
+        float* d_fc_1_out = calloc(sizeof(float), batch_size * hidden_size);
+        relu_backward(fc_1_out, d_fc_1_out, d_relu_out, batch_size * hidden_size);
+        float* d_input = calloc(sizeof(float), batch_size * emb_size);
+        Linear_backward(fc_1, input, d_input, d_fc_1_out, batch_size);
+        dump_float_tensor("dump/fc_1.d_w", fc_1->d_weight, fc_1->in_features * fc_1->out_features);
+        dump_float_tensor("dump/fc_1.d_b", fc_1->d_bias, fc_1->out_features);
     }
 
     return 0;

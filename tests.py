@@ -37,6 +37,12 @@ def main():
     loss = F.cross_entropy(fc_2_out, target)
     print(loss.item())
 
+    loss.backward()
+    torch.testing.assert_close(fc_2.weight.grad, load_tensor("dump/fc_2.d_w", hidden_size, vocab_size).T)
+    torch.testing.assert_close(fc_2.bias.grad, load_tensor("dump/fc_2.d_b", vocab_size))
+    torch.testing.assert_close(fc_1.weight.grad, load_tensor("dump/fc_1.d_w", emb_size, hidden_size).T)
+    torch.testing.assert_close(fc_1.bias.grad, load_tensor("dump/fc_1.d_b", hidden_size))
+
 
 if __name__ == "__main__":
     main()
