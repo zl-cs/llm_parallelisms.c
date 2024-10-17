@@ -50,7 +50,7 @@ Linear* Linear_create(int in_features, int out_features) {
 }
 
 
-void Linear_forward(Linear* self, int batch_size, float* input, float* output) {
+void Linear_forward(Linear* self, float* input, float* output, int batch_size) {
     // Y = X @ W + B
     for (int b = 0; b < batch_size; b++) {
         for (int o = 0; o < self->out_features; o++) {
@@ -66,7 +66,7 @@ void Linear_forward(Linear* self, int batch_size, float* input, float* output) {
 }
 
 
-void Linear_backward(Linear* self, int batch_size, float* input, float* d_output, float* d_input) {
+void Linear_backward(Linear* self, float* input, float* d_input, float* d_output, int batch_size) {
     // dL/dX = dL/dY @ W.T 
     for (int b = 0; b < batch_size; b++) {
         for (int i = 0; i < self->in_features; i++) {
@@ -106,21 +106,21 @@ void Linear_backward(Linear* self, int batch_size, float* input, float* d_output
 }
 
 
-void relu(float* input, int size) {
+void relu(float* input, float* output, int size) {
     for (int i = 0; i < size; i++) {
-        input[i] = input[i] > 0 ? input[i] : 0.0f;
+        output[i] = input[i] > 0 ? input[i] : 0.0f;
     }
 }
 
 
-void relu_backward(int size, float* input, float* d_input) {
+void relu_backward(float* input, float* d_input, float* d_output, int size) {
     for (int i = 0; i < size; i++) {
-        d_input[i] = input[i] > 0 ? 1.0f : 0.0f;
+        d_input[i] = input[i] > 0 ? d_output[i] * 1.0f : 0.0f;
     }
 }
 
 
-void softmax(float* input, int batch_size, int vocab_size) {
+void softmax(float* logits, float* probs, int batch_size, int vocab_size) {
     for (int b = 0; b < batch_size; b++) {
         // Find the max value of the row.
         float max_value = -INFINITY;
@@ -128,14 +128,14 @@ void softmax(float* input, int batch_size, int vocab_size) {
         for (int v = 0; v < vocab_size; v++) {
             int idx = b * vocab_size + v;
             float prev_max = max_value;
-            max_value = input[idx] > max_value ? input[idx] : max_value;
+            max_value = logits[idx] > max_value ? logits[idx] : max_value;
             Z *= exp(prev_max - max_value);
-            Z += exp(input[idx] - max_value);
+            Z += exp(logits[idx] - max_value);
         }
         // Compute stable softmax.
         for (int v = 0; v < vocab_size; v++) {
             int idx = b * vocab_size + v;
-            input[idx] = exp(input[idx] - max_value) / Z;
+            probs[idx] = exp(logits[idx] - max_value) / Z;
         }
     }
 }
@@ -226,19 +226,22 @@ int main(int argc, char** argv) {
 
         // ========= Forward Pass =========
         float* fc_1_out = malloc(sizeof(float) * batch_size * hidden_size);
-        Linear_forward(fc_1, batch_size, input, fc_1_out);
+        Linear_forward(fc_1, input, fc_1_out, batch_size);
         dump_float_tensor("dump/fc_1.out", fc_1_out, batch_size * hidden_size);
-        relu(fc_1_out, batch_size * hidden_size);
-        dump_float_tensor("dump/fc_1.relu", fc_1_out, batch_size * hidden_size);
+
+        float* relu_out = malloc(sizeof(float) * batch_size * hidden_size);
+        relu(fc_1_out, relu_out, batch_size * hidden_size);
+        dump_float_tensor("dump/fc_1.relu", relu_out, batch_size * hidden_size);
 
         float* fc_2_out = malloc(sizeof(float) * batch_size * vocab_size);
-        Linear_forward(fc_2, batch_size, fc_1_out, fc_2_out);
+        Linear_forward(fc_2, relu_out, fc_2_out, batch_size);
         dump_float_tensor("dump/fc_2.out", fc_2_out, batch_size * vocab_size);
 
-        softmax(fc_2_out, batch_size, vocab_size);
-        dump_float_tensor("dump/fc_2.softmax", fc_2_out, batch_size * vocab_size);
+        float* softmax_out = malloc(sizeof(float) * batch_size * vocab_size);
+        softmax(fc_2_out, softmax_out, batch_size, vocab_size);
+        dump_float_tensor("dump/fc_2.softmax", softmax_out, batch_size * vocab_size);
 
-        float loss = cross_entropy_loss(fc_2_out, target, batch_size, vocab_size);
+        float loss = cross_entropy_loss(softmax_out, target, batch_size, vocab_size);
         printf("Loss: %f\n", loss);
 
         // ========= Backward Pass =========

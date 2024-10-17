@@ -34,7 +34,8 @@ def main():
     torch.testing.assert_close(fc_2_out, load_tensor("dump/fc_2.out", batch_size, vocab_size))
     torch.testing.assert_close(fc_2_softmax, load_tensor("dump/fc_2.softmax", batch_size, vocab_size))
 
-    print(F.cross_entropy(fc_2_out, target))
+    loss = F.cross_entropy(fc_2_out, target)
+    print(loss.item())
 
 
 if __name__ == "__main__":
