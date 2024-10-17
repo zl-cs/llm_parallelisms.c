@@ -95,7 +95,7 @@ void Linear_backward(Linear* self, Activation* input, Activation* output) {
                 int weight_idx = i * self->out_features + o;
                 sum += output->d_value[d_output_idx] * self->weight[weight_idx];
             }
-            input->d_value[b * self->in_features + i] = sum;
+            input->d_value[b * self->in_features + i] += sum;
         }
     }
 
@@ -108,7 +108,7 @@ void Linear_backward(Linear* self, Activation* input, Activation* output) {
                 int d_output_idx = b * self->out_features + o;
                 sum += input->value[input_idx] * output->d_value[d_output_idx];
             }
-            self->d_weight[i * self->out_features + o] = sum;
+            self->d_weight[i * self->out_features + o] += sum;
         }
     }
 
@@ -120,7 +120,7 @@ void Linear_backward(Linear* self, Activation* input, Activation* output) {
         for (int b = 0; b < input->batch_size; b++) {
             sum += output->d_value[b * self->out_features + o];
         }
-        self->d_bias[o] = sum;
+        self->d_bias[o] += sum;
     }
 }
 
@@ -169,7 +169,7 @@ void Embedding_backward(Embedding* self, int* idxs, Activation* output) {
         for (int i = 0; i < output->features; i++) {
             int emb_idx = idxs[b] * output->features + i;
             int out_idx = b * output->features + i;
-            self->d_embedding[emb_idx] = output->d_value[out_idx];
+            self->d_embedding[emb_idx] += output->d_value[out_idx];
         }
     }
 }
@@ -184,7 +184,7 @@ void relu(Activation* input, Activation* output) {
 
 void relu_backward(Activation* input, Activation* output) {
     for (int i = 0; i < Activation_numel(input); i++) {
-        input->d_value[i] = input->value[i] > 0 ? output->d_value[i] * 1.0f : 0.0f;
+        input->d_value[i] += input->value[i] > 0 ? output->d_value[i] * 1.0f : 0.0f;
     }
 }
 
