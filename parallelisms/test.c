@@ -5,7 +5,7 @@
 void dump_float_tensor(const char* filename, float* tensor, int size) {
     FILE* file = fopen(filename, "wb");
     if (file == NULL) {
-        printf("Error opening file!\n");
+        perror("Error opening file!\n");
         exit(1);
     }
     fwrite(tensor, sizeof(float), size, file);
