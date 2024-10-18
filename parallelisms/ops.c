@@ -20,9 +20,20 @@ Activation* Activation_create(int batch_size, int features) {
 }
 
 
+Activation* Activation_view(Activation* other, int batch_size, int features) {
+    Activation* self = malloc(sizeof(Activation));
+    self->batch_size = batch_size;
+    self->features = features;
+    self->value = other->value;
+    self->d_value = other->d_value;
+    return self;
+}
+
+
 int Activation_numel(Activation* self) {
     return self->batch_size * self->features;
 }
+
 
 typedef struct {
     int in_features;
@@ -66,6 +77,11 @@ Linear* Linear_create(int in_features, int out_features) {
     self->d_bias = d_bias;
 
    return self;
+}
+
+
+int Linear_weight_numel(Linear* self) {
+    return self->in_features * self->out_features;
 }
 
 
@@ -151,6 +167,11 @@ Embedding* Embedding_create(int vocab_size, int emb_size) {
 }
 
 
+int Embedding_numel(Embedding* self) {
+    return self->vocab_size * self->emb_size;
+}
+
+
 void Embedding_forward(Embedding* self, int* idxs, Activation* output) {
     for (int b = 0; b < output->batch_size; b++) {
         for (int i = 0; i < output->features; i++) {
@@ -220,7 +241,7 @@ float cross_entropy_loss(Activation* probs, int* target) {
 }
 
 
-void cross_entropy_softmax_backward(Activation* probs, Activation* logits, int* target) {
+void cross_entropy_softmax_backward(Activation* logits, Activation* probs, int* target) {
     float d_loss = 1.0f / probs->batch_size;
     for (int b = 0; b < probs->batch_size; b++) {
         for (int v = 0; v < probs->features; v++) {
