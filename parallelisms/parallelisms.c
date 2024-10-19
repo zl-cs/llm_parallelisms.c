@@ -71,13 +71,6 @@ void sgd_step(float* param, float* d_param, int size, float lr) {
 }
 
 
-void zero_grad(float* d_param, int size) {
-    for (int i = 0; i < size; i++) {
-        d_param[i] = 0.0f;
-    }
-}
-
-
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     int world_size, world_rank;
@@ -114,9 +107,11 @@ int main(int argc, char** argv) {
 
     float lr = 0.01;
     int steps = 10000;
-    Dataset_get_batch(dataset, Xs, Ys, batch_size);
+
     // print_batch(Xs, Ys, batch_size, seq_len);
     for (int step = 0; step < steps; step++) {
+        Dataset_get_batch(dataset, Xs, Ys, batch_size);
+
         // Forward pass.
         Embedding_forward(wte, Xs, wte_out);
         Linear_forward(fc_1, wte_out_flat, fc_1_out);
@@ -127,16 +122,16 @@ int main(int argc, char** argv) {
         printf("step: %d, loss %f\n", step, loss);
 
         // Zero grad.
-        zero_grad(wte->d_embedding, Embedding_numel(wte));
-        zero_grad(fc_1->d_weight, Linear_weight_numel(fc_1));
-        zero_grad(fc_1->d_bias, fc_1->out_features);
-        zero_grad(fc_2->d_weight, Linear_weight_numel(fc_2));
-        zero_grad(fc_2->d_bias, fc_2->out_features);
-        zero_grad(wte_out->d_value, Activation_numel(wte_out));
-        zero_grad(fc_1_out->d_value, Activation_numel(fc_1_out));
-        zero_grad(relu_out->d_value, Activation_numel(relu_out));
-        zero_grad(fc_2_out->d_value, Activation_numel(fc_2_out));
-        zero_grad(softmax_out->d_value, Activation_numel(softmax_out));
+        memset(wte->d_embedding, 0, sizeof(float) * Embedding_numel(wte));
+        memset(fc_1->d_weight, 0, sizeof(float) * Linear_weight_numel(fc_1));
+        memset(fc_1->d_bias, 0, sizeof(float) * fc_1->out_features);
+        memset(fc_2->d_weight, 0, sizeof(float) * Linear_weight_numel(fc_2));
+        memset(fc_2->d_bias, 0, sizeof(float) * fc_2->out_features);
+        memset(wte_out->d_value, 0, sizeof(float) * Activation_numel(wte_out));
+        memset(fc_1_out->d_value, 0, sizeof(float) * Activation_numel(fc_1_out));
+        memset(relu_out->d_value, 0, sizeof(float) * Activation_numel(relu_out));
+        memset(fc_2_out->d_value, 0, sizeof(float) * Activation_numel(fc_2_out));
+        memset(softmax_out->d_value, 0, sizeof(float) * Activation_numel(softmax_out));
 
         // Backward pass.
         cross_entropy_softmax_backward(fc_2_out, softmax_out, Ys);
@@ -151,6 +146,5 @@ int main(int argc, char** argv) {
         sgd_step(fc_1->bias, fc_1->d_bias, fc_1->out_features, lr);
         sgd_step(fc_2->weight, fc_2->d_weight, Linear_weight_numel(fc_2), lr);
         sgd_step(fc_2->bias, fc_2->d_bias, fc_2->out_features, lr);
-
     }
 }
