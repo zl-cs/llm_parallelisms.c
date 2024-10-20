@@ -48,17 +48,31 @@ Dataset* Dataset_create_from_file(const char* filepath, int n_file_rows, int seq
 }
 
 
+void Dataset_train_test_split(Dataset* self, Dataset* train_split, Dataset* test_split, float train_percent) {
+    int n_train_rows = (int)(self->n_rows * train_percent);
+    int n_test_rows = self->n_rows - n_train_rows;
+
+    train_split->n_rows = n_train_rows;
+    train_split->seq_len = self->seq_len;
+    train_split->dataset = self->dataset;
+
+    test_split->n_rows = n_test_rows;
+    test_split->seq_len = self->seq_len;
+    test_split->dataset = self->dataset + n_train_rows * (self->seq_len + 1);
+}
+
+
 void Dataset_get_batch(Dataset* self, int* Xs, int* Ys, int batch_size) {
     int block_size = self->seq_len + 1;
     for (int b = 0; b < batch_size; b++) {
         int idx = rand() % self->n_rows;
-        // X = row[:-1]
+        // Xs = row[:-1]
         for (int i = 0; i < self->seq_len; i++) { 
             int data_idx = idx * block_size + i; 
             int Xs_idx = b * self->seq_len + i;
             Xs[Xs_idx] = self->dataset[data_idx];
         }
-        // Y = row[-1]
+        // Ys = row[-1]
         Ys[b] = self->dataset[idx * block_size + self->seq_len];
     }
 }
@@ -184,17 +198,29 @@ int main(int argc, char** argv) {
     Dataset* dataset = Dataset_create_from_file(
         "data/names.txt", /* n_file_rows */ 32033, seq_len
     );
+    Dataset train_split, test_split;
+    Dataset_train_test_split(dataset, &train_split, &test_split, /* train_percent */ 0.9);
     int* Xs = malloc(sizeof(int) * batch_size * seq_len);
     int* Ys = malloc(sizeof(int) * batch_size);
 
+    // Train.
     float lr = 0.1;
     int steps = 25000;
     Model* model = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
     for (int step = 0; step < steps; step++) {
-        Dataset_get_batch(dataset, Xs, Ys, batch_size);
+        Dataset_get_batch(&train_split, Xs, Ys, batch_size);
         float loss = Model_forward(model, Xs, Ys);
         printf("step: %d, loss %f\n", step, loss);
         Model_backward(model, Xs, Ys);
         Model_step(model, lr);
    }
+
+   // Validate.
+   float loss_acc = 0.0f;
+   int n_valid_batches = 500;
+   for (int i = 0; i < n_valid_batches; i ++) {
+        Dataset_get_batch(&test_split, Xs, Ys, batch_size);
+        loss_acc += Model_forward(model, Xs, Ys);
+   }
+   printf("Final validation loss: %f\n", loss_acc / n_valid_batches);
 }
