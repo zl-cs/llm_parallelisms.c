@@ -45,9 +45,13 @@ typedef struct {
 } Linear;
 
 
+float uniform() {
+    return (float)rand() / RAND_MAX;	
+}
+
+
 float he_init(float k) {
-    float uniform = (float)rand() / RAND_MAX;	
-    return 2 * k * uniform - k;
+    return 2 * k * uniform() - k;
 }
 
 

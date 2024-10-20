@@ -149,6 +149,36 @@ float Model_forward(Model* self, int* Xs, int* Ys) {
 }
 
 
+// TODO(eugen): Add support for sampling a full batch at a time.
+void Model_sample(Model* self, int* Xs, int* Ys, int seq_len) {
+    for (int s = 0; s < seq_len; s ++ ) {
+        // Sample one token.
+        Model_forward(self, Xs, Ys);
+        int tok = -1;
+        float u = uniform();
+        float curr_density = 0;
+        for (int i = 0; i < self->softmax_out->features; i++) {
+            curr_density += self->softmax_out->value[i];
+            if (curr_density >= u) {
+                tok = i;
+                break;
+            }
+        }
+
+        // If this is a <BOS> token, we're done so just return.
+        if (tok == 0) {
+            return;
+        }
+
+        // Otherwise, shift Xs one to the left, add the new token, and keep sampling.
+        for (int i = 0; i < seq_len - 1; i++) {
+            Xs[i] = Xs[i + 1];
+        }
+        Xs[seq_len - 1] = tok;
+    }
+}
+
+
 void Model_backward(Model* self, int* Xs, int* Ys) {
         // Zero grad.
         memset(self->wte->d_embedding, 0, sizeof(float) * Embedding_numel(self->wte));
@@ -213,14 +243,25 @@ int main(int argc, char** argv) {
         printf("step: %d, loss %f\n", step, loss);
         Model_backward(model, Xs, Ys);
         Model_step(model, lr);
-   }
+    }
 
-   // Validate.
-   float loss_acc = 0.0f;
-   int n_valid_batches = 500;
-   for (int i = 0; i < n_valid_batches; i ++) {
+    // Validate.
+    float loss_acc = 0.0f;
+    int n_valid_batches = 100;
+    for (int i = 0; i < n_valid_batches; i ++) {
         Dataset_get_batch(&test_split, Xs, Ys, batch_size);
         loss_acc += Model_forward(model, Xs, Ys);
+    }
+    printf("Final validation loss: %f\n", loss_acc / n_valid_batches);
+
+
+    // Sample.
+    int sample_batch_size = 1;
+    int* sample_Xs = calloc(sizeof(float), batch_size * seq_len);
+    int* dummy_Ys = calloc(sizeof(float), batch_size);
+    for (int i = 0; i < 10; i++)  {
+        Model_sample(model, sample_Xs, dummy_Ys, seq_len);
+        Dataset_print_batch(sample_Xs, dummy_Ys, sample_batch_size, seq_len);
+        memset(sample_Xs, 0, sizeof(float) * batch_size * seq_len);
    }
-   printf("Final validation loss: %f\n", loss_acc / n_valid_batches);
 }
