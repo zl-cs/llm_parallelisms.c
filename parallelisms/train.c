@@ -1,3 +1,14 @@
+// Reference single-threaded training loop.
+//
+// This file trains a character-level language model with an MLP backbone. It serves 
+// as a reference implementation of end-to-end training and inference with no 
+// special parallelisms applied.
+//
+// Inspired by Bengio et. al [1] and Karpath's makemore [2].
+//   [1] https://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf
+//   [2] https://github.com/karpathy/makemore 
+
+
 #include <mpi.h>
 #include <stdio.h>
 #include <string.h>
