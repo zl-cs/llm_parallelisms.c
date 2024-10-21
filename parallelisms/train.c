@@ -23,9 +23,7 @@ int main() {
     int hidden_size = 4 * emb_size;
 
     // Create dataset.
-    Dataset* dataset = Dataset_create_from_file(
-        "data/names.txt", /* n_file_rows */ 32033, seq_len
-    );
+    Dataset* dataset = Dataset_create_from_file("data/names.txt", seq_len);
     Dataset train_split, test_split;
     Dataset_train_test_split(dataset, &train_split, &test_split, /* train_percent */ 0.9);
     int* Xs = malloc(sizeof(int) * batch_size * seq_len);

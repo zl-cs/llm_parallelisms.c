@@ -9,30 +9,42 @@ typedef struct {
 } Dataset;
 
 
-Dataset* Dataset_create_from_file(const char* filepath, int n_file_rows, int seq_len) {
+Dataset* Dataset_create_from_file(const char* filepath, int seq_len) {
     FILE* file = fopen(filepath, "r");
     if (file == NULL) {
         perror("Error opening file!\n");
         exit(1);
     }
 
-    // The maximum possible memory we could use is n_rows * block_size * block_size 
-    // if we split up one row into block_size rows. In practice we will use much less.
     int block_size = seq_len + 1;
-    int* dataset = calloc(sizeof(int), n_file_rows * block_size * block_size);
-    int n_rows = 0;
     char buffer[block_size];
+
+    // Create dataset buffer.
+    int n_rows = 0;
+    while (fgets(buffer, block_size, file)) {
+        // Each line contributes len(line) + 1 separate rows but we only need to 
+        // explicitly handle it for the last row, otherwise "\n" takes care of it.
+        int n_tokens = strlen(buffer);
+        n_tokens = buffer[n_tokens - 1] == '\n' ? n_tokens : n_tokens + 1;
+        n_rows += n_tokens;
+    }
+    int* dataset = calloc(sizeof(int), n_rows * block_size);
+
+    // Create rows.
+    rewind(file);
+    int row = 0;
     while(fgets(buffer, block_size, file)) {
         int n_tokens = strlen(buffer);
+        n_tokens = buffer[n_tokens - 1] == '\n' ? n_tokens : n_tokens + 1;
         while (n_tokens > 0) {
             for (int i = n_tokens - 1; i >= 0; i--) {
                 // Subtract 96 so that tokens are between 1 and 27. Token 0 is used as <BOS>.
                 char tok = buffer[i] == '\n' || buffer[i] == '\0' ? 0 : buffer[i] - 96;
-                int offset = n_rows * block_size + block_size - n_tokens;
+                int offset = row * block_size + block_size - n_tokens;
                 dataset[offset + i] = tok;
             }
             n_tokens--;
-            n_rows++;
+            row++;
         }
     }
     fclose(file);
