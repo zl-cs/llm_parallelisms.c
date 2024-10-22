@@ -22,6 +22,8 @@ int main() {
     int emb_size = 16;
     int hidden_size = 4 * emb_size;
 
+    srand(42);
+
     // Create dataset.
     Dataset* dataset = Dataset_create_from_file("data/names.txt", seq_len);
     Dataset train_split, test_split;
