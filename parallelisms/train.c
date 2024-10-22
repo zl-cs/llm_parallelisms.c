@@ -52,7 +52,6 @@ int main() {
     }
     printf("Final validation loss: %f\n", loss_acc / n_valid_batches);
 
-
     // Sample.
     int sample_batch_size = 1;
     int* sample_Xs = calloc(sizeof(float), batch_size * seq_len);

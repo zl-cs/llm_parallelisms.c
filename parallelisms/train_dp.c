@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include "data.c"
 #include "model.c"
-#include <unistd.h>
 
 
 #define rank0_printf(rank, ...) if (rank == 0) { printf(__VA_ARGS__); }
@@ -49,6 +48,7 @@ void allreduce_grad(float* grad, int size, int world_size) {
 
 
 int main(int argc, char** argv) {
+    int global_batch_size = 32;
     int seq_len = 16;  // seq_len is computed offline and is equal to the longest word.
     int vocab_size = 27; 
     int emb_size = 16;
@@ -62,7 +62,6 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
     // Compute per-rank batch size from the global batch size.
-    int global_batch_size = 32;
     if (global_batch_size % world_size != 0) {
         rank0_printf(rank, "Global batch size must be divisible by world size!\n");
         exit(1);
@@ -79,7 +78,7 @@ int main(int argc, char** argv) {
     int* Xs = malloc(sizeof(int) * batch_size * seq_len);
     int* Ys = malloc(sizeof(int) * batch_size);
 
-    // Craete model.
+    // Create model.
     Model* model = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
 
     // Train.
