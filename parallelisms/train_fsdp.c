@@ -16,36 +16,6 @@
 #define rank0_printf(rank, ...) if (rank == 0) { printf(__VA_ARGS__); }
 
 
-// TODO(eugen): Consider adding this functionality directly into Dataset_get_batch so 
-// we can get the rank batch directly without first getting the global batch.
-void Dataset_get_rank_batch(
-    Dataset* self,
-    int* global_Xs, 
-    int* global_Ys, 
-    int* Xs, 
-    int* Ys, 
-    int global_batch_size, 
-    int rank,
-    int world_size
-) {
-    Dataset_get_batch(self, global_Xs, global_Ys, global_batch_size);
-    int local_b = 0;
-    for (int b = 0; b < global_batch_size; b++) {
-        if (b % world_size != rank) {
-            continue;
-        }
-
-        for (int i = 0; i < self->seq_len; i ++) {
-            int local_idx = local_b * self->seq_len + i;
-            int global_idx = b * self->seq_len + i;
-            Xs[local_idx] = global_Xs[global_idx];
-        }
-        Ys[local_b] = global_Ys[b];
-        local_b += 1;
-    }
-}
-
-
 void allgather_param(float* shard, int shard_size, float* param) {
     MPI_Allgather(
         shard, shard_size, MPI_FLOAT, param, shard_size, MPI_FLOAT, MPI_COMM_WORLD

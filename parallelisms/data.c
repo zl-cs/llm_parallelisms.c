@@ -87,6 +87,36 @@ void Dataset_get_batch(Dataset* self, int* Xs, int* Ys, int batch_size) {
 }
 
 
+// TODO(eugen): Consider adding this functionality directly into Dataset_get_batch so 
+// we can get the rank batch directly without first getting the global batch.
+void Dataset_get_rank_batch(
+    Dataset* self,
+    int* global_Xs, 
+    int* global_Ys, 
+    int* Xs, 
+    int* Ys, 
+    int global_batch_size, 
+    int rank,
+    int world_size
+) {
+    Dataset_get_batch(self, global_Xs, global_Ys, global_batch_size);
+    int local_b = 0;
+    for (int b = 0; b < global_batch_size; b++) {
+        if (b % world_size != rank) {
+            continue;
+        }
+
+        for (int i = 0; i < self->seq_len; i ++) {
+            int local_idx = local_b * self->seq_len + i;
+            int global_idx = b * self->seq_len + i;
+            Xs[local_idx] = global_Xs[global_idx];
+        }
+        Ys[local_b] = global_Ys[b];
+        local_b += 1;
+    }
+}
+
+
 void Dataset_print_batch(int* Xs, int* Ys, int batch_size, int seq_len) {
     for (int b = 0; b < batch_size; b++) {
         for (int s = 0; s < seq_len; s++)  {

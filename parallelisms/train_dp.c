@@ -9,37 +9,7 @@
 #define rank0_printf(rank, ...) if (rank == 0) { printf(__VA_ARGS__); }
 
 
-// TODO(eugen): Consider adding this functionality directly into Dataset_get_batch so 
-// we can get the rank batch directly without first getting the global batch.
-void Dataset_get_rank_batch(
-    Dataset* self,
-    int* global_Xs, 
-    int* global_Ys, 
-    int* Xs, 
-    int* Ys, 
-    int global_batch_size, 
-    int rank,
-    int world_size
-) {
-    Dataset_get_batch(self, global_Xs, global_Ys, global_batch_size);
-    int local_b = 0;
-    for (int b = 0; b < global_batch_size; b++) {
-        if (b % world_size != rank) {
-            continue;
-        }
-
-        for (int i = 0; i < self->seq_len; i ++) {
-            int local_idx = local_b * self->seq_len + i;
-            int global_idx = b * self->seq_len + i;
-            Xs[local_idx] = global_Xs[global_idx];
-        }
-        Ys[local_b] = global_Ys[b];
-        local_b += 1;
-    }
-}
-
-
-void allreduce_grad(float* grad, int size, int world_size) {
+void allreduce_mean(float* grad, int size, int world_size) {
     MPI_Allreduce(MPI_IN_PLACE, grad, size, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
     for (int i = 0; i < size; i++) {
         grad[i] = grad[i] / world_size;
@@ -86,29 +56,29 @@ int main(int argc, char** argv) {
     int steps = 25000;
     for (int step = 0; step < steps; step++) {
         Dataset_get_rank_batch(&train_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, rank, world_size);
-        float loss_acc = Model_forward(model, Xs, Ys);
-        MPI_Allreduce(MPI_IN_PLACE, &loss_acc, /* count */ 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-        rank0_printf(rank, "step: %d, loss %f\n", step, loss_acc / world_size);
+        float loss = Model_forward(model, Xs, Ys);
+        allreduce_mean(&loss, /* size */ 1, world_size);
+        rank0_printf(rank, "step: %d, loss %f\n", step, loss);
 
         Model_backward(model, Xs, Ys);
-        allreduce_grad(model->wte->d_embedding, Embedding_numel(model->wte), world_size);
-        allreduce_grad(model->fc_1->d_weight, Linear_weight_numel(model->fc_1), world_size);
-        allreduce_grad(model->fc_1->d_bias, model->fc_1->out_features, world_size);
-        allreduce_grad(model->fc_2->d_weight, Linear_weight_numel(model->fc_2), world_size);
-        allreduce_grad(model->fc_2->d_bias, model->fc_2->out_features, world_size);
+        allreduce_mean(model->wte->d_embedding, Embedding_numel(model->wte), world_size);
+        allreduce_mean(model->fc_1->d_weight, Linear_weight_numel(model->fc_1), world_size);
+        allreduce_mean(model->fc_1->d_bias, model->fc_1->out_features, world_size);
+        allreduce_mean(model->fc_2->d_weight, Linear_weight_numel(model->fc_2), world_size);
+        allreduce_mean(model->fc_2->d_bias, model->fc_2->out_features, world_size);
 
         Model_step(model, lr);
     }
 
     // Validate.
-    float loss_acc = 0.0f;
+    float loss = 0.0f;
     int n_valid_batches = 100;
     for (int i = 0; i < n_valid_batches; i ++) {
         Dataset_get_rank_batch(&test_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, rank, world_size);
-        loss_acc += Model_forward(model, Xs, Ys);
+        loss += Model_forward(model, Xs, Ys);
     }
-    MPI_Allreduce(MPI_IN_PLACE, &loss_acc, /* count */ 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-    rank0_printf(rank, "Final validation loss: %f\n", loss_acc / n_valid_batches / world_size);
+    allreduce_mean(&loss, /* size */ 1, world_size);
+    rank0_printf(rank, "Final validation loss: %f\n", loss / n_valid_batches);
 
     // Sample.
     if (rank == 0) {
