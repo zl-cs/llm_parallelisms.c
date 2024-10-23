@@ -61,20 +61,22 @@ float Model_forward(Model* self, int* Xs, int* Ys) {
 }
 
 
-void Model_backward(Model* self, int* Xs, int* Ys) {
-        // Zero grad.
-        memset(self->wte->d_embedding, 0, sizeof(float) * Embedding_numel(self->wte));
-        memset(self->fc_1->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_1));
-        memset(self->fc_1->d_bias, 0, sizeof(float) * self->fc_1->out_features);
-        memset(self->fc_2->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_2));
-        memset(self->fc_2->d_bias, 0, sizeof(float) * self->fc_2->out_features);
-        memset(self->wte_out->d_value, 0, sizeof(float) * Activation_numel(self->wte_out));
-        memset(self->fc_1_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_1_out));
-        memset(self->relu_out->d_value, 0, sizeof(float) * Activation_numel(self->relu_out));
-        memset(self->fc_2_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_2_out));
-        memset(self->softmax_out->d_value, 0, sizeof(float) * Activation_numel(self->softmax_out));
+void Model_zerograd(Model* self) {
+    memset(self->wte->d_embedding, 0, sizeof(float) * Embedding_numel(self->wte));
+    memset(self->fc_1->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_1));
+    memset(self->fc_1->d_bias, 0, sizeof(float) * self->fc_1->out_features);
+    memset(self->fc_2->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_2));
+    memset(self->fc_2->d_bias, 0, sizeof(float) * self->fc_2->out_features);
+    memset(self->wte_out->d_value, 0, sizeof(float) * Activation_numel(self->wte_out));
+    memset(self->fc_1_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_1_out));
+    memset(self->relu_out->d_value, 0, sizeof(float) * Activation_numel(self->relu_out));
+    memset(self->fc_2_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_2_out));
+    memset(self->softmax_out->d_value, 0, sizeof(float) * Activation_numel(self->softmax_out));
+}
 
-        // Backward pass.
+
+void Model_backward(Model* self, int* Xs, int* Ys) {
+        Model_zerograd(self);
         cross_entropy_softmax_backward(self->fc_2_out, self->softmax_out, Ys);
         Linear_backward(self->fc_2, self->relu_out, self->fc_2_out);
         relu_backward(self->fc_1_out, self->relu_out);
@@ -93,20 +95,27 @@ void Model_step(Model* self, float lr) {
 
 
 // TODO(eugen): Add support for sampling a full batch at a time.
+int Model_sample_token(Model* self) {
+    int tok = -1;
+    float u = uniform();
+    float curr_density = 0;
+    for (int i = 0; i < self->softmax_out->features; i++) {
+        curr_density += self->softmax_out->value[i];
+        if (curr_density >= u) {
+            tok = i;
+            break;
+        }
+    }
+    return tok;
+}
+
+
+// TODO(eugen): Add support for sampling a full batch at a time.
 void Model_sample(Model* self, int* Xs, int* Ys, int seq_len) {
     for (int s = 0; s < seq_len; s ++ ) {
         // Sample one token.
         Model_forward(self, Xs, Ys);
-        int tok = -1;
-        float u = uniform();
-        float curr_density = 0;
-        for (int i = 0; i < self->softmax_out->features; i++) {
-            curr_density += self->softmax_out->value[i];
-            if (curr_density >= u) {
-                tok = i;
-                break;
-            }
-        }
+        int tok = Model_sample_token(self);
 
         // If this is a <BOS> token, we're done so just return.
         if (tok == 0) {
@@ -120,4 +129,3 @@ void Model_sample(Model* self, int* Xs, int* Ys, int seq_len) {
         Xs[seq_len - 1] = tok;
     }
 }
-
