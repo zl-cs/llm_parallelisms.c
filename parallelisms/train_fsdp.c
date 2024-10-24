@@ -186,10 +186,8 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
 }
 
 
-// TODO(eugen): This is basically a duplicate of Model_sample() which calls Model_forward_fsdp
-// instead of Model_forward(). It is probably possible to merge the two functions together.
 void Model_sample_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int world_size, int seq_len) {
-    for (int s = 0; s < seq_len; s ++ ) {
+    for (int s = 0; s < seq_len; s++) {
         // Sample one token.
         Model_forward_fsdp(self, Xs, Ys, flat_buffer, world_size);
         int tok = Model_sample_token(self);
