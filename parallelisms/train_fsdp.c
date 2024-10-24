@@ -1,38 +1,18 @@
-// Fully-sharded data parallel (i.e. Deepspeed Zero) training loop. 
+// Fully-sharded data parallel (i.e. Deepspeed ZeRO [1]) training loop. 
 //
 // Supports:
-//     * Gradient sharding (i.e. Zero 2)
-//     * Model parameter sharding (i.e. Zero 3)
-//
+//     * Gradient sharding (i.e. ZeRO stage 2)
+//     * Model parameter sharding (i.e. ZeRO stage 3)
 // Optimizer parameter sharding is not (currently) supported because we use SGD.
+//
+// [1]: https://arxiv.org/abs/1910.02054
 
 
 #include <mpi.h>
 #include <stdlib.h>
 #include "data.c"
+#include "distributed.c"
 #include "model.c"
-
-
-#define rank0_printf(rank, ...) if (rank == 0) { printf(__VA_ARGS__); }
-
-
-void allgather_param(float* shard, int shard_size, float* param) {
-    MPI_Allgather(
-        shard, shard_size, MPI_FLOAT, param, shard_size, MPI_FLOAT, MPI_COMM_WORLD
-    );
-}
-
-
-void reducescatter_grad(float* grad, float* shard, int shard_size, int world_size) {
-    int shard_sizes[world_size];
-    for (int i = 0; i < world_size; i++) {
-        shard_sizes[i] = shard_size;
-    }
-    MPI_Reduce_scatter(grad, shard, shard_sizes, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-    for (int i = 0; i < shard_size; i++) {
-        shard[i] = shard[i] / world_size;
-    }
-}
 
 
 // TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
@@ -103,7 +83,7 @@ Model* Model_create_rank_shard(
 float Model_forward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int world_size) {
     // wte forward.
     int wte_shard_size = Embedding_numel(self->wte);
-    allgather_param(self->wte->embedding, wte_shard_size, flat_buffer);
+    allgather(self->wte->embedding, wte_shard_size, flat_buffer);
     float* wte_shard = self->wte->embedding;
     int wte_shard_vocab_size = self->wte->vocab_size;
     self->wte->embedding = flat_buffer;
@@ -114,7 +94,7 @@ float Model_forward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
 
     // fc_1 forward.
     int fc_1_shard_size = Linear_weight_numel(self->fc_1);
-    allgather_param(self->fc_1->weight, fc_1_shard_size, flat_buffer);
+    allgather(self->fc_1->weight, fc_1_shard_size, flat_buffer);
     float* fc_1_shard = self->fc_1->weight;
     int fc_1_shard_in_features = self->fc_1->in_features;
     self->fc_1->weight = flat_buffer;
@@ -127,7 +107,7 @@ float Model_forward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
 
     // fc_2 forward.
     int fc_2_shard_size = Linear_weight_numel(self->fc_2);
-    allgather_param(self->fc_2->weight, fc_2_shard_size, flat_buffer);
+    allgather(self->fc_2->weight, fc_2_shard_size, flat_buffer);
     float* fc_2_shard = self->fc_2->weight;
     int fc_2_shard_in_features = self->fc_2->in_features;
     self->fc_2->weight = flat_buffer;
@@ -155,7 +135,7 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
     int fc_2_shard_size = Linear_weight_numel(self->fc_2);
     int fc_2_size = fc_2_shard_size * world_size;
     memset(flat_buffer, 0, sizeof(float) * 2 * fc_2_size);
-    allgather_param(self->fc_2->weight, fc_2_shard_size, flat_buffer);
+    allgather(self->fc_2->weight, fc_2_shard_size, flat_buffer);
     float* fc_2_shard = self->fc_2->weight;
     float* fc_2_d_shard = self->fc_2->d_weight;
     int fc_2_shard_in_features = self->fc_2->in_features;
@@ -163,7 +143,7 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
     self->fc_2->d_weight = flat_buffer + fc_2_size;
     self->fc_2->in_features = fc_2_shard_in_features * world_size;
     Linear_backward(self->fc_2, self->relu_out, self->fc_2_out);
-    reducescatter_grad(flat_buffer + fc_2_size, fc_2_d_shard, fc_2_shard_size, world_size);
+    reducescatter_mean(flat_buffer + fc_2_size, fc_2_d_shard, fc_2_shard_size, world_size);
     self->fc_2->weight = fc_2_shard;
     self->fc_2->d_weight = fc_2_d_shard;
     self->fc_2->in_features = fc_2_shard_in_features;
@@ -174,7 +154,7 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
     int fc_1_shard_size = Linear_weight_numel(self->fc_1);
     int fc_1_size = fc_1_shard_size * world_size;
     memset(flat_buffer, 0, sizeof(float) * 2 * fc_1_size);
-    allgather_param(self->fc_1->weight, fc_1_shard_size, flat_buffer);
+    allgather(self->fc_1->weight, fc_1_shard_size, flat_buffer);
     float* fc_1_shard = self->fc_1->weight;
     float* fc_1_d_shard = self->fc_1->d_weight;
     int fc_1_shard_in_features = self->fc_1->in_features;
@@ -182,7 +162,7 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
     self->fc_1->d_weight = flat_buffer + fc_1_size;
     self->fc_1->in_features = fc_1_shard_in_features * world_size;
     Linear_backward(self->fc_1, self->wte_out_flat, self->fc_1_out);
-    reducescatter_grad(flat_buffer + fc_1_size, fc_1_d_shard, fc_1_shard_size, world_size);
+    reducescatter_mean(flat_buffer + fc_1_size, fc_1_d_shard, fc_1_shard_size, world_size);
     self->fc_1->weight = fc_1_shard;
     self->fc_1->d_weight = fc_1_d_shard;
     self->fc_1->in_features = fc_1_shard_in_features;
@@ -191,7 +171,7 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
     int wte_shard_size = Embedding_numel(self->wte);
     int wte_size = wte_shard_size * world_size;
     memset(flat_buffer, 0, sizeof(float) * 2 * wte_size);
-    allgather_param(self->wte->embedding, wte_shard_size, flat_buffer);
+    allgather(self->wte->embedding, wte_shard_size, flat_buffer);
     float* wte_shard = self->wte->embedding;
     float* wte_d_shard = self->wte->d_embedding;
     int wte_shard_vocab_size = self->wte->vocab_size;
@@ -199,7 +179,7 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
     self->wte->d_embedding = flat_buffer + wte_size;
     self->wte->vocab_size = wte_shard_vocab_size * world_size;
     Embedding_backward(self->wte, Xs, self->wte_out);
-    reducescatter_grad(flat_buffer + wte_size, wte_d_shard, wte_shard_size, world_size);
+    reducescatter_mean(flat_buffer + wte_size, wte_d_shard, wte_shard_size, world_size);
     self->wte->embedding = wte_shard;
     self->wte->d_embedding = wte_d_shard;
     self->wte->vocab_size = wte_shard_vocab_size; 
