@@ -191,12 +191,12 @@ void Model_sample_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int wo
     while (!done) {
         Model_forward_fsdp(self, Xs, Ys, flat_buffer, world_size);
         int tok = Model_sample_token(self);
-        // TODO(eugen): In theory, the model output and the RNG state should be 
-        // identical across all ranks and hence "tok" should also be identical. However, 
-        // this is not always the case in practice (possibly due to rank communication order) 
-        // which can lead to MPI hangs if some ranks sample <BOS> before others. To overcome
-        // this issue, we broadcast the sampled token from rank 0 to all other ranks.
-        MPI_Bcast(&tok, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        // In theory, the model output and the RNG state should be identical across all ranks 
+        // and hence "tok" should also be identical. However, this is not always the case 
+        // in practice (possibly due to rank communication order) which can lead to MPI hangs 
+        // if some ranks sample <BOS> before others. To overcome this issue, we broadcast the
+        // sampled token from rank 0 to all other ranks.
+        MPI_Bcast(&tok, /* count */ 1, MPI_INT, /* root */ 0, MPI_COMM_WORLD);
         done = Model_sample_update_input(Xs, Ys, tok, seq_len);
     }
 }
