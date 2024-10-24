@@ -20,6 +20,13 @@ Activation* Activation_create(int batch_size, int features) {
 }
 
 
+void Activation_destory(Activation* self) {
+    free(self->value);
+    free(self->d_value);
+    free(self);
+}
+
+
 Activation* Activation_view(Activation* other, int batch_size, int features) {
     Activation* self = malloc(sizeof(Activation));
     self->batch_size = batch_size;
