@@ -187,8 +187,8 @@ void Model_backward_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int 
 
 
 void Model_sample_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int world_size, int seq_len) {
-    for (int s = 0; s < seq_len; s++) {
-        // Sample one token.
+    bool done = false;
+    while (!done) {
         Model_forward_fsdp(self, Xs, Ys, flat_buffer, world_size);
         int tok = Model_sample_token(self);
         // TODO(eugen): In theory, the model output and the RNG state should be 
@@ -197,20 +197,9 @@ void Model_sample_fsdp(Model* self, int* Xs, int* Ys, float* flat_buffer, int wo
         // which can lead to MPI hangs if some ranks sample <BOS> before others. To overcome
         // this issue, we broadcast the sampled token from rank 0 to all other ranks.
         MPI_Bcast(&tok, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-        // If this is a <BOS> token, we're done so just return.
-        if (tok == 0) {
-            return;
-        }
-
-        // Otherwise, shift Xs one to the left, add the new token, and keep sampling.
-        for (int i = 0; i < seq_len - 1; i++) {
-            Xs[i] = Xs[i + 1];
-        }
-        Xs[seq_len - 1] = tok;
+        done = Model_sample_update_input(Xs, Ys, tok, seq_len);
     }
 }
-
 
 
 int max(int a, int b) {

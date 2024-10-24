@@ -10,7 +10,6 @@
 #include "model.c"
 
 
-// TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
 Model* Model_create_rank_shard(
     int batch_size, int seq_len, int vocab_size, int emb_size, int hidden_size, int rank, int world_size
 ) {
@@ -80,21 +79,11 @@ void Model_backward_tp(Model* self, int* Xs, int* Ys, int world_size) {
 
 
 void Model_sample_tp(Model* self, int* Xs, int* Ys, int world_size, int seq_len) {
-    for (int s = 0; s < seq_len; s++) {
-        // Sample one token.
+    bool done = false;
+    while (!done) {
         Model_forward_tp(self, Xs, Ys, world_size);
         int tok = Model_sample_token(self);
-
-        // If this is a <BOS> token, we're done so just return.
-        if (tok == 0) {
-            return;
-        }
-
-        // Otherwise, shift Xs one to the left, add the new token, and keep sampling.
-        for (int i = 0; i < seq_len - 1; i++) {
-            Xs[i] = Xs[i + 1];
-        }
-        Xs[seq_len - 1] = tok;
+        done = Model_sample_update_input(Xs, Ys, tok, seq_len);
     }
 }
 

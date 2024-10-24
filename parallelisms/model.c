@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdbool.h>
 #include "ops.c"
 
 
@@ -94,7 +95,6 @@ void Model_step(Model* self, float lr) {
 }
 
 
-// TODO(eugen): Add support for sampling a full batch at a time.
 int Model_sample_token(Model* self) {
     int tok = -1;
     float u = uniform();
@@ -110,22 +110,26 @@ int Model_sample_token(Model* self) {
 }
 
 
+bool Model_sample_update_input(int* Xs, int* Ys, int tok, int seq_len) {
+    // If this is a <BOS> token, we're done so just return.
+    if (tok == 0) {
+        return true;
+    }
+    // Otherwise, shift Xs one to the left, add the new token, and keep sampling.
+    for (int i = 0; i < seq_len - 1; i++) {
+        Xs[i] = Xs[i + 1];
+    }
+    Xs[seq_len - 1] = tok;
+    return false;
+}
+
+
 // TODO(eugen): Add support for sampling a full batch at a time.
 void Model_sample(Model* self, int* Xs, int* Ys, int seq_len) {
-    for (int s = 0; s < seq_len; s ++ ) {
-        // Sample one token.
+    bool done = false;
+    while (!done) {
         Model_forward(self, Xs, Ys);
         int tok = Model_sample_token(self);
-
-        // If this is a <BOS> token, we're done so just return.
-        if (tok == 0) {
-            return;
-        }
-
-        // Otherwise, shift Xs one to the left, add the new token, and keep sampling.
-        for (int i = 0; i < seq_len - 1; i++) {
-            Xs[i] = Xs[i + 1];
-        }
-        Xs[seq_len - 1] = tok;
+        done = Model_sample_update_input(Xs, Ys, tok, seq_len); 
     }
 }
