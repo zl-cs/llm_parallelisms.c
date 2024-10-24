@@ -91,6 +91,15 @@ Linear* Linear_create(int in_features, int out_features) {
 }
 
 
+void Linear_destroy(Linear* self) {
+    free(self->weight);
+    free(self->d_weight);
+    free(self->bias);
+    free(self->d_bias);
+    free(self);
+}
+
+
 int Linear_weight_numel(Linear* self) {
     return self->in_features * self->out_features;
 }
@@ -175,6 +184,13 @@ Embedding* Embedding_create(int vocab_size, int emb_size) {
     self->embedding = embedding;
     self->d_embedding = d_embedding;
     return self;
+}
+
+
+void Embedding_destory(Embedding* self) {
+    free(self->embedding);
+    free(self->d_embedding);
+    free(self);
 }
 
 

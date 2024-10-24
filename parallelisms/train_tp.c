@@ -103,6 +103,8 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     if (hidden_size % world_size != 0) {
         rank0_printf(rank, "Hidden size must be divisible by world size!\n");
+        MPI_Finalize();
+        exit(1);
     }
 
     // Create dataset.

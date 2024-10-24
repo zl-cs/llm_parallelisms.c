@@ -223,16 +223,19 @@ int main(int argc, char** argv) {
 
     if (emb_size % world_size != 0) {
         rank0_printf(rank, "Embedding size must be divisible by world size!\n");
+        MPI_Finalize();
         exit(1);
     }
     if (hidden_size % world_size != 0) {
         rank0_printf(rank, "Hidden dimension size must be divisible by world size!\n");
+        MPI_Finalize();
         exit(1);
     }
 
     // Compute per-rank batch size from the global batch size.
     if (global_batch_size % world_size != 0) {
         rank0_printf(rank, "Global batch size must be divisible by world size!\n");
+        MPI_Finalize();
         exit(1);
     }
     int batch_size = global_batch_size / world_size;
