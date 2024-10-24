@@ -7,17 +7,6 @@
 #include "model.c"
 
 
-void send(float* input, int input_size, int to_rank) {
-    MPI_Send(input, input_size, MPI_FLOAT, to_rank, 0, MPI_COMM_WORLD);
-}
-
-
-void recv(float* output, int output_size, int from_rank) {
-    MPI_Status status;
-    MPI_Recv(output, output_size, MPI_FLOAT, from_rank, 0, MPI_COMM_WORLD, &status);
-}
-
-
 Model* Model_create_rank_stage(
     int batch_size, int seq_len, int vocab_size, int emb_size, int hidden_size, int rank
 ) {
@@ -136,6 +125,20 @@ void Model_step_pp(Model* self, float lr, int rank) {
 }
 
 
+void Model_sample_pp(Model* self, int* Xs, int* Ys, int rank, int seq_len) {
+    bool done = false;
+    while (!done) {
+        Model_forward_pp(self, Xs, Ys, rank);
+        int tok;
+        if (rank == 2) {
+            tok = Model_sample_token(self);
+        }
+        MPI_Bcast(&tok, /* count */ 1, MPI_INT, /* root */ 2, MPI_COMM_WORLD);
+        done = Model_sample_update_input(Xs, Ys, tok, seq_len); 
+    }
+}
+
+
 int main(int argc, char** argv) {
     int batch_size = 32;
     int seq_len = 16;  // seq_len is computed offline and is equal to the longest word.
@@ -185,6 +188,17 @@ int main(int argc, char** argv) {
     }
     rank0_printf(rank, "Final validation loss: %f\n", loss / n_valid_batches);
 
+    // Sample.
+    int sample_batch_size = 1;
+    int* sample_Xs = calloc(sizeof(float), batch_size * seq_len);
+    int* dummy_Ys = calloc(sizeof(float), batch_size);
+    for (int i = 0; i < 10 ; i++)  {
+        Model_sample_pp(model, sample_Xs, dummy_Ys, rank, seq_len);
+        if (rank == 0) {
+            Dataset_print_batch(sample_Xs, dummy_Ys, sample_batch_size, seq_len);
+        }
+        memset(sample_Xs, 0, sizeof(float) * batch_size * seq_len);
+    }
 
     MPI_Finalize();
     return 0;
