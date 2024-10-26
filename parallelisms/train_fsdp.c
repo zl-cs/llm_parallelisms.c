@@ -19,19 +19,7 @@
 
 
 // TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
-Model* Model_create_rank_shard(
-    int batch_size, int seq_len, int vocab_size, int emb_size, int hidden_size, int pg_rank, int pg_size 
-) {
-    // Hack! We first construct the full model then shard the parameters. This is just to 
-    // ensure that the model parameters are initialized in the exact same way as the single-threaded
-    // training loop for easy comparision. In practice, this approach would OOM for large models.
-    Model* self = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
-
-    // Pad vocab size to be divisible by world_size.
-    int vocab_size_padded = vocab_size + (pg_size - (vocab_size % pg_size));
-    Model_pad_vocab(self, vocab_size_padded, emb_size);
-    // rank0_printf(rank, "Padded vocab size: %d\n", vocab_size_padded);
-
+void Model_shard_fsdp(Model* self, int pg_rank, int pg_size) {
     // Shard wte.
     int wte_shard_size = Embedding_numel(self->wte) / pg_size;
     float* wte_shard = malloc(sizeof(float) * wte_shard_size);
@@ -63,8 +51,6 @@ Model* Model_create_rank_shard(
     self->fc_2->weight = fc_2_shard;
     self->fc_2->d_weight = fc_2_d_shard;
     self->fc_2->in_features = self->fc_2->in_features / pg_size;
-
-    return self;
 }
 
 
@@ -248,10 +234,19 @@ int main(int argc, char** argv) {
     int* Xs = malloc(sizeof(int) * batch_size * seq_len);
     int* Ys = malloc(sizeof(int) * batch_size);
 
-    // Create model shard and temporary buffer to store allgathered params/grads of individual layers.
-    Model* model = Model_create_rank_shard(
-        batch_size, seq_len, vocab_size, emb_size, hidden_size, dist->dp_rank, dist->dp_size 
-    );
+    // Create model with padded vocab.
+    // Hack! We first construct the full model then shard the parameters. This is just to 
+    // ensure that the model parameters are initialized in the exact same way as the single-threaded
+    // training loop for easy comparision. In practice, this approach would OOM for large models.
+    Model* model = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
+    // Hack! We manually construct the padded embedding instead of using vocab_size_padded in
+    // Model_create above. This ensures that the RNG state matches the single-threaded training
+    // loop for easy comparison.
+    int vocab_size_padded = vocab_size + (dist->dp_size - (vocab_size % dist->dp_size));
+    Model_pad_vocab(model, vocab_size_padded);
+    rank0_printf(dist->world_rank, "Padded vocab size: %d\n", vocab_size_padded);
+    Model_shard_fsdp(model, dist->dp_rank, dist->dp_size);
+    // Create temporary buffer to store allgathered params/grads of individual layers.
     int max_layer_size = 0;
     max_layer_size = max(Embedding_numel(model->wte) * dist->dp_size, max_layer_size);
     max_layer_size = max(Linear_weight_numel(model->fc_1) * dist->dp_size, max_layer_size);

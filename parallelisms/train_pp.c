@@ -10,14 +10,7 @@
 #include "model.c"
 
 
-Model* Model_create_rank_shard(
-    int batch_size, int seq_len, int vocab_size, int emb_size, int hidden_size, int pg_rank
-) {
-    // Hack! We first construct the full model then shard the parameters to stages. This is just to 
-    // ensure that the model parameters are initialized in the exact same way as the single-threaded
-    // training loop for easy comparision. In practice, this approach would OOM for large models.
-    Model* self = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
-
+void Model_shard_pp(Model* self, int pg_rank) {
     if (pg_rank == 0) {
         Linear_destroy(self->fc_1); self->fc_1 = NULL;
         Linear_destroy(self->fc_2); self->fc_2 = NULL;
@@ -40,8 +33,6 @@ Model* Model_create_rank_shard(
         MPI_Finalize();
         exit(1);
     }
-
-    return self;
 }
 
 
@@ -163,7 +154,11 @@ int main(int argc, char** argv) {
     int* Ys = malloc(sizeof(int) * batch_size);
 
     // Create model.
-    Model* model = Model_create_rank_shard(batch_size, seq_len, vocab_size, emb_size, hidden_size, dist->pp_rank);
+    // Hack! We first construct the full model then shard the parameters to stages. This is just to 
+    // ensure that the model parameters are initialized in the exact same way as the single-threaded
+    // training loop for easy comparision. In practice, this approach would OOM for large models.
+    Model* model = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
+    Model_shard_pp(model, dist->pp_rank);
 
     // Train.
     float lr = 0.1;

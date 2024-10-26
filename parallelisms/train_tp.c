@@ -13,14 +13,7 @@
 #include "model.c"
 
 
-Model* Model_create_rank_shard(
-    int batch_size, int seq_len, int vocab_size, int emb_size, int hidden_size, int pg_rank, int pg_size 
-) {
-    // Hack! We first construct the full model then shard the parameters. This is just to 
-    // ensure that the model parameters are initialized in the exact same way as the single-threaded
-    // training loop for easy comparision. In practice, this approach would OOM for large models.
-    Model* self = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
-
+void Model_shard_tp(Model* self, int pg_rank, int pg_size) {
     // Shard fc_1 to be column parallel across ranks.
     int fc_1_shard_cols = self->fc_1->out_features / pg_size;
     float* fc_1_weight_shard = malloc(sizeof(float) * self->fc_1->in_features * fc_1_shard_cols);
@@ -50,12 +43,10 @@ Model* Model_create_rank_shard(
     self->fc_2->in_features = fc_2_shard_rows;
 
     // Update activation shapes to match.
-    Activation_destory(self->fc_1_out);
-    Activation_destory(self->relu_out);
-    self->fc_1_out = Activation_create(batch_size, fc_1_shard_cols);
-    self->relu_out= Activation_create(batch_size, fc_1_shard_cols);
-
-    return self;
+    Activation* fc_1_out_shard = Activation_create(self->fc_1_out->batch_size, fc_1_shard_cols);
+    Activation* relu_out_shard = Activation_create(self->relu_out->batch_size, fc_1_shard_cols);
+    Activation_destory(self->fc_1_out); self->fc_1_out = fc_1_out_shard;
+    Activation_destory(self->relu_out); self->relu_out = relu_out_shard;
 }
 
 
@@ -118,9 +109,11 @@ int main(int argc, char** argv) {
     int* Ys = malloc(sizeof(int) * batch_size);
 
     // Create model.
-    Model* model = Model_create_rank_shard(
-        batch_size, seq_len, vocab_size, emb_size, hidden_size, dist->tp_rank, dist->tp_size 
-    );
+    // Hack! We first construct the full model then shard the parameters. This is just to 
+    // ensure that the model parameters are initialized in the exact same way as the single-threaded
+    // training loop for easy comparision. In practice, this approach would OOM for large models.
+    Model* model = Model_create(batch_size, seq_len, vocab_size, emb_size, hidden_size);
+    Model_shard_tp(model, dist->tp_rank, dist->tp_size);
 
     float lr = 0.1;
     int steps = 25000;
