@@ -18,118 +18,27 @@
 #include "model.c"
 
 
-// Forward for the fully sharded MLP. For each layer:
-//   1. Materialize the full parameters by allgathering them.
-//   2. Temporarily update pointers to point to the full parameters.
-//   3. Compute the forward pass.
-//   4. Revert pointers to point to the sharded parameters.
 float Model_forward_fsdp(
     Model* self, int* Xs, int* Ys, float* flat_buffer, MPI_Comm pg_comm, int pg_size
 ) {
-    // wte forward.
-    int wte_shard_size = Embedding_numel(self->wte);
-    allgather(self->wte->embedding, wte_shard_size, flat_buffer, pg_comm);
-    float* wte_shard = self->wte->embedding;
-    int wte_shard_vocab_size = self->wte->vocab_size;
-    self->wte->embedding = flat_buffer;
-    self->wte->vocab_size = wte_shard_vocab_size * pg_size;
-    Embedding_forward(self->wte, Xs, self->wte_out);
-    self->wte->embedding = wte_shard;
-    self->wte->vocab_size = wte_shard_vocab_size; 
-
-    // fc_1 forward.
-    int fc_1_shard_size = Linear_weight_numel(self->fc_1);
-    allgather(self->fc_1->weight, fc_1_shard_size, flat_buffer, pg_comm);
-    float* fc_1_shard = self->fc_1->weight;
-    int fc_1_shard_in_features = self->fc_1->in_features;
-    self->fc_1->weight = flat_buffer;
-    self->fc_1->in_features = fc_1_shard_in_features * pg_size;
-    Linear_forward(self->fc_1, self->wte_out_flat, self->fc_1_out);
-    self->fc_1->weight = fc_1_shard;
-    self->fc_1->in_features = fc_1_shard_in_features;
-
+    Embedding_forward_fsdp(self->wte, Xs, self->wte_out, flat_buffer, pg_comm, pg_size);
+    Linear_forward_fsdp(self->fc_1, self->wte_out_flat, self->fc_1_out, flat_buffer, pg_comm, pg_size);
     relu(self->fc_1_out, self->relu_out);
-
-    // fc_2 forward.
-    int fc_2_shard_size = Linear_weight_numel(self->fc_2);
-    allgather(self->fc_2->weight, fc_2_shard_size, flat_buffer, pg_comm);
-    float* fc_2_shard = self->fc_2->weight;
-    int fc_2_shard_in_features = self->fc_2->in_features;
-    self->fc_2->weight = flat_buffer;
-    self->fc_2->in_features = fc_2_shard_in_features * pg_size;
-    Linear_forward(self->fc_2, self->relu_out, self->fc_2_out);
-    self->fc_2->weight = fc_2_shard;
-    self->fc_2->in_features = fc_2_shard_in_features;
-
+    Linear_forward_fsdp(self->fc_2, self->relu_out, self->fc_2_out, flat_buffer, pg_comm, pg_size);
     softmax(self->fc_2_out, self->softmax_out);
     return cross_entropy_loss(self->softmax_out, Ys);
 }
 
 
-// Backward for the fully sharded MLP. For each layer:
-//   1. Materialize the full parameters by allgathering them.
-//   2. Temporarily update pointers to point to the full parameters / gradients.
-//   3. Compute the backward pass.
-//   4. Reduce scatter the gradients. 
-//   5. Revert pointers to point to the sharded parameters / gradients.
 void Model_backward_fsdp(
     Model* self, int* Xs, int* Ys, float* flat_buffer, MPI_Comm pg_comm, int pg_size
 ) {
     Model_zerograd(self);
     cross_entropy_softmax_backward(self->fc_2_out, self->softmax_out, Ys);
-
-    // fc_2 backward.
-    int fc_2_shard_size = Linear_weight_numel(self->fc_2);
-    int fc_2_size = fc_2_shard_size * pg_size;
-    memset(flat_buffer, 0, sizeof(float) * 2 * fc_2_size);
-    allgather(self->fc_2->weight, fc_2_shard_size, flat_buffer, pg_comm);
-    float* fc_2_shard = self->fc_2->weight;
-    float* fc_2_d_shard = self->fc_2->d_weight;
-    int fc_2_shard_in_features = self->fc_2->in_features;
-    self->fc_2->weight = flat_buffer;
-    self->fc_2->d_weight = flat_buffer + fc_2_size;
-    self->fc_2->in_features = fc_2_shard_in_features * pg_size;
-    Linear_backward(self->fc_2, self->relu_out, self->fc_2_out);
-    reducescatter_mean(flat_buffer + fc_2_size, fc_2_d_shard, fc_2_shard_size, pg_comm, pg_size);
-    self->fc_2->weight = fc_2_shard;
-    self->fc_2->d_weight = fc_2_d_shard;
-    self->fc_2->in_features = fc_2_shard_in_features;
-
+    Linear_backward_fsdp(self->fc_2, self->relu_out, self->fc_2_out, flat_buffer, pg_comm, pg_size);
     relu_backward(self->fc_1_out, self->relu_out);
-
-    // fc_1 backward.
-    int fc_1_shard_size = Linear_weight_numel(self->fc_1);
-    int fc_1_size = fc_1_shard_size * pg_size;
-    memset(flat_buffer, 0, sizeof(float) * 2 * fc_1_size);
-    allgather(self->fc_1->weight, fc_1_shard_size, flat_buffer, pg_comm);
-    float* fc_1_shard = self->fc_1->weight;
-    float* fc_1_d_shard = self->fc_1->d_weight;
-    int fc_1_shard_in_features = self->fc_1->in_features;
-    self->fc_1->weight = flat_buffer;
-    self->fc_1->d_weight = flat_buffer + fc_1_size;
-    self->fc_1->in_features = fc_1_shard_in_features * pg_size;
-    Linear_backward(self->fc_1, self->wte_out_flat, self->fc_1_out);
-    reducescatter_mean(flat_buffer + fc_1_size, fc_1_d_shard, fc_1_shard_size, pg_comm, pg_size);
-    self->fc_1->weight = fc_1_shard;
-    self->fc_1->d_weight = fc_1_d_shard;
-    self->fc_1->in_features = fc_1_shard_in_features;
-
-    // wte backward.
-    int wte_shard_size = Embedding_numel(self->wte);
-    int wte_size = wte_shard_size * pg_size;
-    memset(flat_buffer, 0, sizeof(float) * 2 * wte_size);
-    allgather(self->wte->embedding, wte_shard_size, flat_buffer, pg_comm);
-    float* wte_shard = self->wte->embedding;
-    float* wte_d_shard = self->wte->d_embedding;
-    int wte_shard_vocab_size = self->wte->vocab_size;
-    self->wte->embedding = flat_buffer;
-    self->wte->d_embedding = flat_buffer + wte_size;
-    self->wte->vocab_size = wte_shard_vocab_size * pg_size;
-    Embedding_backward(self->wte, Xs, self->wte_out);
-    reducescatter_mean(flat_buffer + wte_size, wte_d_shard, wte_shard_size, pg_comm, pg_size);
-    self->wte->embedding = wte_shard;
-    self->wte->d_embedding = wte_d_shard;
-    self->wte->vocab_size = wte_shard_vocab_size; 
+    Linear_backward_fsdp(self->fc_1, self->wte_out_flat, self->fc_1_out, flat_buffer, pg_comm, pg_size);
+    Embedding_backward_fsdp(self->wte, Xs, self->wte_out, flat_buffer, pg_comm, pg_size);
 }
 
 

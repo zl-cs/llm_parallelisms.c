@@ -6,6 +6,13 @@
 #define rank0_printf(rank, ...) if (rank == 0) { printf(__VA_ARGS__); }
 
 
+int max(int a, int b) {
+    return a >= b ? a : b;
+}
+
+
+// ========== Communication utils ==========
+
 typedef struct {
     int tp_rank;
     int tp_size;
@@ -141,6 +148,8 @@ void allreduce_mean(float* input, int size, MPI_Comm pg_comm, int pg_size) {
 }
 
 
+// ========== Data loader utils ==========
+
 // TODO(eugen): Consider adding this functionality directly into Dataset_get_batch so 
 // we can get the rank batch directly without first getting the global batch.
 void Dataset_get_rank_batch(
@@ -171,6 +180,7 @@ void Dataset_get_rank_batch(
 }
 
 
+// ========== Tensor parallelism utils ==========
 
 void Model_shard_tp(Model* self, int pg_rank, int pg_size) {
     // Shard fc_1 to be column parallel across ranks.
@@ -209,6 +219,8 @@ void Model_shard_tp(Model* self, int pg_rank, int pg_size) {
 }
 
 
+// ========== Fully-sharded data parallelism utils ==========
+
 // TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
 void Model_shard_fsdp(Model* self, int pg_rank, int pg_size) {
     // Shard wte.
@@ -240,6 +252,80 @@ void Model_shard_fsdp(Model* self, int pg_rank, int pg_size) {
 }
 
 
+void Embedding_forward_fsdp(
+    Embedding* self, int* idxs, Activation* output, float* flat_buffer, MPI_Comm pg_comm, int pg_size
+) {
+    int shard_size = Embedding_numel(self);
+    allgather(self->embedding, shard_size, flat_buffer, pg_comm);
+    float* shard = self->embedding;
+    int shard_vocab_size = self->vocab_size;
+    self->embedding = flat_buffer;
+    self->vocab_size = shard_vocab_size * pg_size;
+    Embedding_forward(self, idxs, output);
+    self->embedding = shard;
+    self->vocab_size = shard_vocab_size; 
+}
+
+
+void Embedding_backward_fsdp(
+    Embedding* self, int* idxs, Activation* output, float* flat_buffer, MPI_Comm pg_comm, int pg_size
+) {
+    int shard_size = Embedding_numel(self);
+    int full_size = shard_size * pg_size;
+    memset(flat_buffer, 0, sizeof(float) * 2 * full_size);
+    allgather(self->embedding, shard_size, flat_buffer, pg_comm);
+    float* shard = self->embedding;
+    float* d_shard = self->d_embedding;
+    int shard_vocab_size = self->vocab_size;
+    self->embedding = flat_buffer;
+    self->d_embedding = flat_buffer + full_size;
+    self->vocab_size = shard_vocab_size * pg_size;
+    Embedding_backward(self, idxs, output);
+    reducescatter_mean(flat_buffer + full_size, d_shard, shard_size, pg_comm, pg_size);
+    self->embedding = shard;
+    self->d_embedding = d_shard;
+    self->vocab_size = shard_vocab_size; 
+}
+
+
+void Linear_forward_fsdp(
+    Linear* self, Activation* input, Activation* output, float* flat_buffer, MPI_Comm pg_comm, int pg_size
+) {
+    int shard_size = Linear_weight_numel(self);
+    allgather(self->weight, shard_size, flat_buffer, pg_comm);
+    float* shard = self->weight;
+    int shard_in_features = self->in_features;
+    self->weight = flat_buffer;
+    self->in_features = shard_in_features * pg_size;
+    Linear_forward(self, input, output);
+    self->weight = shard;
+    self->in_features = shard_in_features;
+}
+
+
+void Linear_backward_fsdp(
+    Linear* self, Activation* input, Activation* output, float* flat_buffer, MPI_Comm pg_comm, int pg_size
+) {
+    int shard_size = Linear_weight_numel(self);
+    int full_size = shard_size * pg_size;
+    memset(flat_buffer, 0, sizeof(float) * 2 * full_size);
+    allgather(self->weight, shard_size, flat_buffer, pg_comm);
+    float* shard = self->weight;
+    float* d_shard = self->d_weight;
+    int shard_in_features = self->in_features;
+    self->weight = flat_buffer;
+    self->d_weight = flat_buffer + full_size;
+    self->in_features = shard_in_features * pg_size;
+    Linear_backward(self, input, output);
+    reducescatter_mean(flat_buffer + full_size, d_shard, shard_size, pg_comm, pg_size);
+    self->weight = shard;
+    self->d_weight = d_shard;
+    self->in_features = shard_in_features;
+}
+
+
+// ========== Pipeline parallelism utils ==========
+
 void Model_shard_pp(Model* self, int pg_rank) {
     if (pg_rank == 0) {
         Linear_destroy(self->fc_1); self->fc_1 = NULL;
@@ -263,9 +349,4 @@ void Model_shard_pp(Model* self, int pg_rank) {
         MPI_Finalize();
         exit(1);
     }
-}
-
-
-int max(int a, int b) {
-    return a >= b ? a : b;
 }

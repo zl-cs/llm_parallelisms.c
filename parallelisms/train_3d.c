@@ -33,48 +33,16 @@ void Model_shard_3d(Model* self, Dist* dist) {
 float Model_forward_3d(Model* self, int* Xs, int* Ys, float* flat_buffer, Dist* dist) {
     float loss;
     if (dist->pp_rank == 0) {
-        // wte forward.
-        int wte_shard_size = Embedding_numel(self->wte);
-        allgather(self->wte->embedding, wte_shard_size, flat_buffer, dist->dp_comm);
-        float* wte_shard = self->wte->embedding;
-        int wte_shard_vocab_size = self->wte->vocab_size;
-        self->wte->embedding = flat_buffer;
-        self->wte->vocab_size = wte_shard_vocab_size * dist->dp_size;
-        Embedding_forward(self->wte, Xs, self->wte_out);
-        self->wte->embedding = wte_shard;
-        self->wte->vocab_size = wte_shard_vocab_size; 
-
+        Embedding_forward_fsdp(self->wte, Xs, self->wte_out, flat_buffer, dist->dp_comm, dist->dp_size);
         send(self->wte_out->value, Activation_numel(self->wte_out), /* to_rank */ 1, dist->pp_comm);
     } else if (dist->pp_rank == 1) {
         recv(self->wte_out_flat->value, Activation_numel(self->wte_out_flat), /* from_rank */ 0, dist->pp_comm);
-
-        // fc_1 forward.
-        int fc_1_shard_size = Linear_weight_numel(self->fc_1);
-        allgather(self->fc_1->weight, fc_1_shard_size, flat_buffer, dist->dp_comm);
-        float* fc_1_shard = self->fc_1->weight;
-        int fc_1_shard_in_features = self->fc_1->in_features;
-        self->fc_1->weight = flat_buffer;
-        self->fc_1->in_features = fc_1_shard_in_features * dist->dp_size;
-        Linear_forward(self->fc_1, self->wte_out_flat, self->fc_1_out);
-        self->fc_1->weight = fc_1_shard;
-        self->fc_1->in_features = fc_1_shard_in_features;
-
+        Linear_forward_fsdp(self->fc_1, self->wte_out_flat, self->fc_1_out, flat_buffer, dist->dp_comm, dist->dp_size);
         relu(self->fc_1_out, self->relu_out);
         send(self->relu_out->value, Activation_numel(self->relu_out), /* to_rank */ 2, dist->pp_comm);
     } else if (dist->pp_rank == 2) {
         recv(self->relu_out->value, Activation_numel(self->relu_out), /* from_rank */ 1, dist->pp_comm);
-
-        // fc_2 forward.
-        int fc_2_shard_size = Linear_weight_numel(self->fc_2);
-        allgather(self->fc_2->weight, fc_2_shard_size, flat_buffer, dist->dp_comm);
-        float* fc_2_shard = self->fc_2->weight;
-        int fc_2_shard_in_features = self->fc_2->in_features;
-        self->fc_2->weight = flat_buffer;
-        self->fc_2->in_features = fc_2_shard_in_features * dist->dp_size;
-        Linear_forward(self->fc_2, self->relu_out, self->fc_2_out);
-        self->fc_2->weight = fc_2_shard;
-        self->fc_2->in_features = fc_2_shard_in_features;
-
+        Linear_forward_fsdp(self->fc_2, self->relu_out, self->fc_2_out, flat_buffer, dist->dp_comm, dist->dp_size);
         allreduce_mean(self->fc_2_out->value, Activation_numel(self->fc_2_out), dist->tp_comm, dist->tp_size);
         softmax(self->fc_2_out, self->softmax_out);
         loss = cross_entropy_loss(self->softmax_out, Ys);
@@ -83,7 +51,7 @@ float Model_forward_3d(Model* self, int* Xs, int* Ys, float* flat_buffer, Dist* 
         MPI_Finalize();
         exit(1);
     }
-    // We don't technically need to broadcast here, but it's nicer if all the ranks have the
+    // We don't technically need to broadcast here, but it's nicer if all the pp ranks have the
     // same loss value at the end.
     MPI_Bcast(&loss, /* count */ 1, MPI_FLOAT, /* root */ 2, dist->pp_comm);
     return loss;
@@ -150,7 +118,6 @@ int main(int argc, char** argv) {
     // Shard the model. Must happen _after_ the temporary buffer creation because Model_shard_pp
     // deallocates fc_1 and fc_2.
     Model_shard_3d(model, dist);
-
 
     // Train.
     Dataset_get_rank_batch(
