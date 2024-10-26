@@ -10,32 +10,6 @@
 #include "model.c"
 
 
-void Model_shard_pp(Model* self, int pg_rank) {
-    if (pg_rank == 0) {
-        Linear_destroy(self->fc_1); self->fc_1 = NULL;
-        Linear_destroy(self->fc_2); self->fc_2 = NULL;
-        Activation_destory(self->fc_1_out); self->fc_1_out = NULL;
-        Activation_destory(self->relu_out); self->relu_out = NULL;
-        Activation_destory(self->fc_2_out); self->fc_2_out = NULL;
-        Activation_destory(self->softmax_out); self->softmax_out = NULL;
-    } else if (pg_rank == 1) {
-        Embedding_destory(self->wte); self->wte = NULL;
-        Linear_destroy(self->fc_2); self->fc_2 = NULL;
-        Activation_destory(self->fc_2_out); self->fc_2_out = NULL;
-        Activation_destory(self->softmax_out); self->softmax_out = NULL;
-    } else if (pg_rank == 2) {
-        Embedding_destory(self->wte); self->wte = NULL;
-        Linear_destroy(self->fc_1); self->fc_1 = NULL;
-        Activation_destory(self->wte_out); self->wte_out = NULL; self->wte_out_flat = NULL;
-        Activation_destory(self->fc_1_out); self->fc_1_out = NULL;
-    } else {
-        printf("Unknown rank: %d\n", pg_rank);
-        MPI_Finalize();
-        exit(1);
-    }
-}
-
-
 float Model_forward_pp(Model* self, int* Xs, int* Ys, int pg_rank, MPI_Comm pg_comm) {
     float loss;
     if (pg_rank == 0) {

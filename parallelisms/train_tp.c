@@ -13,43 +13,6 @@
 #include "model.c"
 
 
-void Model_shard_tp(Model* self, int pg_rank, int pg_size) {
-    // Shard fc_1 to be column parallel across ranks.
-    int fc_1_shard_cols = self->fc_1->out_features / pg_size;
-    float* fc_1_weight_shard = malloc(sizeof(float) * self->fc_1->in_features * fc_1_shard_cols);
-    float* fc_1_d_weight_shard = calloc(sizeof(float), self->fc_1->in_features * fc_1_shard_cols);
-    for (int row = 0; row < self->fc_1->in_features; row++) {
-        int shard_offset = row * fc_1_shard_cols;
-        int weight_offset = row * self->fc_1->out_features + pg_rank * fc_1_shard_cols;
-        memcpy(fc_1_weight_shard + shard_offset, self->fc_1->weight + weight_offset, sizeof(float) * fc_1_shard_cols);
-    }
-    float* fc_1_bias_shard = malloc(sizeof(float) * fc_1_shard_cols);
-    float* fc_1_d_bias_shard = calloc(sizeof(float), fc_1_shard_cols);
-    memcpy(fc_1_bias_shard, self->fc_1->bias + pg_rank * fc_1_shard_cols, sizeof(float) * fc_1_shard_cols);
-    free(self->fc_1->weight); self->fc_1->weight = fc_1_weight_shard;
-    free(self->fc_1->d_weight); self->fc_1->d_weight = fc_1_d_weight_shard;
-    free(self->fc_1->bias); self->fc_1->bias = fc_1_bias_shard;
-    free(self->fc_1->d_bias); self->fc_1->d_bias = fc_1_d_bias_shard;
-    self->fc_1->out_features = fc_1_shard_cols;
-
-    // Shard fc_2 to be row parallel.
-    int fc_2_shard_rows = self->fc_2->in_features / pg_size;
-    int fc_2_weight_shard_size = Linear_weight_numel(self->fc_2) / pg_size;
-    float* fc_2_weight_shard = malloc(sizeof(float) * fc_2_weight_shard_size);
-    float* fc_2_d_weight_shard = calloc(sizeof(float), fc_2_weight_shard_size);
-    memcpy(fc_2_weight_shard, self->fc_2->weight + pg_rank * fc_2_weight_shard_size, sizeof(float) * fc_2_weight_shard_size);
-    free(self->fc_2->weight); self->fc_2->weight = fc_2_weight_shard;
-    free(self->fc_2->d_weight); self->fc_2->d_weight = fc_2_d_weight_shard;
-    self->fc_2->in_features = fc_2_shard_rows;
-
-    // Update activation shapes to match.
-    Activation* fc_1_out_shard = Activation_create(self->fc_1_out->batch_size, fc_1_shard_cols);
-    Activation* relu_out_shard = Activation_create(self->relu_out->batch_size, fc_1_shard_cols);
-    Activation_destory(self->fc_1_out); self->fc_1_out = fc_1_out_shard;
-    Activation_destory(self->relu_out); self->relu_out = relu_out_shard;
-}
-
-
 float Model_forward_tp(Model* self, int* Xs, int* Ys, MPI_Comm pg_comm, int pg_size) {
     Embedding_forward(self->wte, Xs, self->wte_out);
     Linear_forward(self->fc_1, self->wte_out_flat, self->fc_1_out);

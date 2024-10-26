@@ -1,3 +1,6 @@
+#ifndef MODEL_C
+#define MODEL_C
+
 #include <string.h>
 #include <stdbool.h>
 #include "ops.c"
@@ -144,3 +147,6 @@ void Model_pad_vocab(Model* self, int vocab_size_padded) {
     free(self->wte->d_embedding); self->wte->d_embedding = wte_d_padded;
     self->wte->vocab_size = vocab_size_padded;
 }
+
+
+#endif

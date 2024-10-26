@@ -18,42 +18,6 @@
 #include "model.c"
 
 
-// TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
-void Model_shard_fsdp(Model* self, int pg_rank, int pg_size) {
-    // Shard wte.
-    int wte_shard_size = Embedding_numel(self->wte) / pg_size;
-    float* wte_shard = malloc(sizeof(float) * wte_shard_size);
-    float* wte_d_shard = calloc(sizeof(float), wte_shard_size);
-    memcpy(wte_shard, self->wte->embedding + (pg_rank * wte_shard_size), sizeof(float) * wte_shard_size);
-    free(self->wte->embedding);
-    self->wte->embedding = wte_shard;
-    self->wte->d_embedding = wte_d_shard;
-    self->wte->vocab_size = self->wte->vocab_size / pg_size;
-
-    // Shard fc_1.
-    int fc_1_shard_size = Linear_weight_numel(self->fc_1) / pg_size;
-    float* fc_1_shard = malloc(sizeof(float) * fc_1_shard_size);
-    float* fc_1_d_shard = calloc(sizeof(float), fc_1_shard_size);
-    memcpy(fc_1_shard, self->fc_1->weight + (pg_rank * fc_1_shard_size), sizeof(float) * fc_1_shard_size);
-    free(self->fc_1->weight);
-    free(self->fc_1->d_weight);
-    self->fc_1->weight = fc_1_shard;
-    self->fc_1->d_weight = fc_1_d_shard;
-    self->fc_1->in_features = self->fc_1->in_features / pg_size;
-
-    // Shard fc_2.
-    int fc_2_shard_size = Linear_weight_numel(self->fc_2) / pg_size;
-    float* fc_2_shard = malloc(sizeof(float) * fc_2_shard_size);
-    float* fc_2_d_shard = calloc(sizeof(float), fc_2_shard_size);
-    memcpy(fc_2_shard, self->fc_2->weight + (pg_rank * fc_2_shard_size), sizeof(float) * fc_2_shard_size);
-    free(self->fc_2->weight);
-    free(self->fc_2->d_weight);
-    self->fc_2->weight = fc_2_shard;
-    self->fc_2->d_weight = fc_2_d_shard;
-    self->fc_2->in_features = self->fc_2->in_features / pg_size;
-}
-
-
 // Forward for the fully sharded MLP. For each layer:
 //   1. Materialize the full parameters by allgathering them.
 //   2. Temporarily update pointers to point to the full parameters.
@@ -184,11 +148,6 @@ void Model_sample_fsdp(
         MPI_Bcast(&tok, /* count */ 1, MPI_INT, /* root */ 0, MPI_COMM_WORLD);
         done = Model_sample_update_input(Xs, Ys, tok, seq_len);
     }
-}
-
-
-int max(int a, int b) {
-    return a >= b ? a : b;
 }
 
 

@@ -1,5 +1,7 @@
 #include <mpi.h>
 #include <unistd.h>
+#include "model.c"
+
 
 #define rank0_printf(rank, ...) if (rank == 0) { printf(__VA_ARGS__); }
 
@@ -136,4 +138,134 @@ void allreduce_mean(float* input, int size, MPI_Comm pg_comm, int pg_size) {
     for (int i = 0; i < size; i++) {
         input[i] = input[i] / pg_size;
     }
+}
+
+
+// TODO(eugen): Consider adding this functionality directly into Dataset_get_batch so 
+// we can get the rank batch directly without first getting the global batch.
+void Dataset_get_rank_batch(
+    Dataset* self,
+    int* global_Xs, 
+    int* global_Ys, 
+    int* Xs, 
+    int* Ys, 
+    int global_batch_size, 
+    int rank,
+    int world_size
+) {
+    Dataset_get_batch(self, global_Xs, global_Ys, global_batch_size);
+    int local_b = 0;
+    for (int b = 0; b < global_batch_size; b++) {
+        if (b % world_size != rank) {
+            continue;
+        }
+
+        for (int i = 0; i < self->seq_len; i ++) {
+            int local_idx = local_b * self->seq_len + i;
+            int global_idx = b * self->seq_len + i;
+            Xs[local_idx] = global_Xs[global_idx];
+        }
+        Ys[local_b] = global_Ys[b];
+        local_b += 1;
+    }
+}
+
+
+
+void Model_shard_tp(Model* self, int pg_rank, int pg_size) {
+    // Shard fc_1 to be column parallel across ranks.
+    int fc_1_shard_cols = self->fc_1->out_features / pg_size;
+    float* fc_1_weight_shard = malloc(sizeof(float) * self->fc_1->in_features * fc_1_shard_cols);
+    float* fc_1_d_weight_shard = calloc(sizeof(float), self->fc_1->in_features * fc_1_shard_cols);
+    for (int row = 0; row < self->fc_1->in_features; row++) {
+        int shard_offset = row * fc_1_shard_cols;
+        int weight_offset = row * self->fc_1->out_features + pg_rank * fc_1_shard_cols;
+        memcpy(fc_1_weight_shard + shard_offset, self->fc_1->weight + weight_offset, sizeof(float) * fc_1_shard_cols);
+    }
+    float* fc_1_bias_shard = malloc(sizeof(float) * fc_1_shard_cols);
+    float* fc_1_d_bias_shard = calloc(sizeof(float), fc_1_shard_cols);
+    memcpy(fc_1_bias_shard, self->fc_1->bias + pg_rank * fc_1_shard_cols, sizeof(float) * fc_1_shard_cols);
+    free(self->fc_1->weight); self->fc_1->weight = fc_1_weight_shard;
+    free(self->fc_1->d_weight); self->fc_1->d_weight = fc_1_d_weight_shard;
+    free(self->fc_1->bias); self->fc_1->bias = fc_1_bias_shard;
+    free(self->fc_1->d_bias); self->fc_1->d_bias = fc_1_d_bias_shard;
+    self->fc_1->out_features = fc_1_shard_cols;
+
+    // Shard fc_2 to be row parallel.
+    int fc_2_shard_rows = self->fc_2->in_features / pg_size;
+    int fc_2_weight_shard_size = Linear_weight_numel(self->fc_2) / pg_size;
+    float* fc_2_weight_shard = malloc(sizeof(float) * fc_2_weight_shard_size);
+    float* fc_2_d_weight_shard = calloc(sizeof(float), fc_2_weight_shard_size);
+    memcpy(fc_2_weight_shard, self->fc_2->weight + pg_rank * fc_2_weight_shard_size, sizeof(float) * fc_2_weight_shard_size);
+    free(self->fc_2->weight); self->fc_2->weight = fc_2_weight_shard;
+    free(self->fc_2->d_weight); self->fc_2->d_weight = fc_2_d_weight_shard;
+    self->fc_2->in_features = fc_2_shard_rows;
+
+    // Update activation shapes to match.
+    Activation* fc_1_out_shard = Activation_create(self->fc_1_out->batch_size, fc_1_shard_cols);
+    Activation* relu_out_shard = Activation_create(self->relu_out->batch_size, fc_1_shard_cols);
+    Activation_destory(self->fc_1_out); self->fc_1_out = fc_1_out_shard;
+    Activation_destory(self->relu_out); self->relu_out = relu_out_shard;
+}
+
+
+// TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
+void Model_shard_fsdp(Model* self, int pg_rank, int pg_size) {
+    // Shard wte.
+    int wte_shard_size = Embedding_numel(self->wte) / pg_size;
+    float* wte_shard = malloc(sizeof(float) * wte_shard_size);
+    float* wte_d_shard = calloc(sizeof(float), wte_shard_size);
+    memcpy(wte_shard, self->wte->embedding + (pg_rank * wte_shard_size), sizeof(float) * wte_shard_size);
+    free(self->wte->embedding); self->wte->embedding = wte_shard;
+    free(self->wte->d_embedding); self->wte->d_embedding = wte_d_shard;
+    self->wte->vocab_size = self->wte->vocab_size / pg_size;
+
+    // Shard fc_1.
+    int fc_1_shard_size = Linear_weight_numel(self->fc_1) / pg_size;
+    float* fc_1_shard = malloc(sizeof(float) * fc_1_shard_size);
+    float* fc_1_d_shard = calloc(sizeof(float), fc_1_shard_size);
+    memcpy(fc_1_shard, self->fc_1->weight + (pg_rank * fc_1_shard_size), sizeof(float) * fc_1_shard_size);
+    free(self->fc_1->weight); self->fc_1->weight = fc_1_shard;
+    free(self->fc_1->d_weight); self->fc_1->d_weight = fc_1_d_shard;
+    self->fc_1->in_features = self->fc_1->in_features / pg_size;
+
+    // Shard fc_2.
+    int fc_2_shard_size = Linear_weight_numel(self->fc_2) / pg_size;
+    float* fc_2_shard = malloc(sizeof(float) * fc_2_shard_size);
+    float* fc_2_d_shard = calloc(sizeof(float), fc_2_shard_size);
+    memcpy(fc_2_shard, self->fc_2->weight + (pg_rank * fc_2_shard_size), sizeof(float) * fc_2_shard_size);
+    free(self->fc_2->weight); self->fc_2->weight = fc_2_shard;
+    free(self->fc_2->d_weight); self->fc_2->d_weight = fc_2_d_shard;
+    self->fc_2->in_features = self->fc_2->in_features / pg_size;
+}
+
+
+void Model_shard_pp(Model* self, int pg_rank) {
+    if (pg_rank == 0) {
+        Linear_destroy(self->fc_1); self->fc_1 = NULL;
+        Linear_destroy(self->fc_2); self->fc_2 = NULL;
+        Activation_destory(self->fc_1_out); self->fc_1_out = NULL;
+        Activation_destory(self->relu_out); self->relu_out = NULL;
+        Activation_destory(self->fc_2_out); self->fc_2_out = NULL;
+        Activation_destory(self->softmax_out); self->softmax_out = NULL;
+    } else if (pg_rank == 1) {
+        Embedding_destory(self->wte); self->wte = NULL;
+        Linear_destroy(self->fc_2); self->fc_2 = NULL;
+        Activation_destory(self->fc_2_out); self->fc_2_out = NULL;
+        Activation_destory(self->softmax_out); self->softmax_out = NULL;
+    } else if (pg_rank == 2) {
+        Embedding_destory(self->wte); self->wte = NULL;
+        Linear_destroy(self->fc_1); self->fc_1 = NULL;
+        Activation_destory(self->wte_out); self->wte_out = NULL; self->wte_out_flat = NULL;
+        Activation_destory(self->fc_1_out); self->fc_1_out = NULL;
+    } else {
+        printf("Unknown rank: %d\n", pg_rank);
+        MPI_Finalize();
+        exit(1);
+    }
+}
+
+
+int max(int a, int b) {
+    return a >= b ? a : b;
 }
