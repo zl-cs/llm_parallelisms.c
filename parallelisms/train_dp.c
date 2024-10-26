@@ -15,18 +15,19 @@ int main(int argc, char** argv) {
     int hidden_size = 4 * emb_size;
 
     // Initialize environment. 
+    srand(42);
     MPI_Init(&argc, &argv);
-    int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-    Dist* dist = Dist_create(1, world_size, 1);
+    int dp_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &dp_size);
+    Dist* dist = Dist_create(/* tp_size */ 1, dp_size, /* pp_size */ 1);
 
     // Compute per-rank batch size from the global batch size.
-    if (global_batch_size % world_size != 0) {
+    if (global_batch_size % dist->dp_size != 0) {
         rank0_printf(dist->world_rank, "Global batch size must be divisible by world size!\n");
         MPI_Finalize();
         exit(1);
     }
-    int batch_size = global_batch_size / world_size;
+    int batch_size = global_batch_size / dist->dp_size;
     rank0_printf(dist->world_rank, "Micro batch_size: %d\n", batch_size);
  
     // Create dataset.
