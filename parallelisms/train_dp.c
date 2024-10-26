@@ -15,20 +15,19 @@ int main(int argc, char** argv) {
     int hidden_size = 4 * emb_size;
 
     // Initialize environment. 
-    srand(42);
     MPI_Init(&argc, &argv);
-    int rank, world_size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    Dist* dist = Dist_create(1, world_size, 1);
 
     // Compute per-rank batch size from the global batch size.
     if (global_batch_size % world_size != 0) {
-        rank0_printf(rank, "Global batch size must be divisible by world size!\n");
+        rank0_printf(dist->world_rank, "Global batch size must be divisible by world size!\n");
         MPI_Finalize();
         exit(1);
     }
     int batch_size = global_batch_size / world_size;
-    rank0_printf(rank, "Micro batch_size: %d\n", batch_size);
+    rank0_printf(dist->world_rank, "Micro batch_size: %d\n", batch_size);
  
     // Create dataset.
     Dataset* dataset = Dataset_create_from_file("data/names.txt", seq_len);
@@ -46,17 +45,19 @@ int main(int argc, char** argv) {
     float lr = 0.1;
     int steps = 25000;
     for (int step = 0; step < steps; step++) {
-        Dataset_get_rank_batch(&train_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, rank, world_size);
+        Dataset_get_rank_batch(
+            &train_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, dist->dp_rank, dist->dp_size
+        );
         float loss = Model_forward(model, Xs, Ys);
-        allreduce_mean(&loss, /* size */1, world_size);
-        rank0_printf(rank, "step: %d, loss %f\n", step, loss);
+        allreduce_mean(&loss, /* size */1, dist->dp_comm, dist->dp_size);
+        rank0_printf(dist->world_rank, "step: %d, loss %f\n", step, loss);
 
         Model_backward(model, Xs, Ys);
-        allreduce_mean(model->wte->d_embedding, Embedding_numel(model->wte), world_size);
-        allreduce_mean(model->fc_1->d_weight, Linear_weight_numel(model->fc_1), world_size);
-        allreduce_mean(model->fc_1->d_bias, model->fc_1->out_features, world_size);
-        allreduce_mean(model->fc_2->d_weight, Linear_weight_numel(model->fc_2), world_size);
-        allreduce_mean(model->fc_2->d_bias, model->fc_2->out_features, world_size);
+        allreduce_mean(model->wte->d_embedding, Embedding_numel(model->wte), dist->dp_comm, dist->dp_size);
+        allreduce_mean(model->fc_1->d_weight, Linear_weight_numel(model->fc_1), dist->dp_comm, dist->dp_size);
+        allreduce_mean(model->fc_1->d_bias, model->fc_1->out_features, dist->dp_comm, dist->dp_size);
+        allreduce_mean(model->fc_2->d_weight, Linear_weight_numel(model->fc_2), dist->dp_comm, dist->dp_size);
+        allreduce_mean(model->fc_2->d_bias, model->fc_2->out_features, dist->dp_comm, dist->dp_size);
 
         Model_step(model, lr);
     }
@@ -65,14 +66,16 @@ int main(int argc, char** argv) {
     float loss = 0.0f;
     int n_valid_batches = 100;
     for (int i = 0; i < n_valid_batches; i ++) {
-        Dataset_get_rank_batch(&test_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, rank, world_size);
+        Dataset_get_rank_batch(
+            &test_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, dist->dp_rank, dist->dp_size 
+        );
         loss += Model_forward(model, Xs, Ys);
     }
-    allreduce_mean(&loss, /* size */ 1, world_size);
-    rank0_printf(rank, "Final validation loss: %f\n", loss / n_valid_batches);
+    allreduce_mean(&loss, /* size */ 1, dist->dp_comm, dist->dp_size);
+    rank0_printf(dist->world_rank, "Final validation loss: %f\n", loss / n_valid_batches);
 
     // Sample.
-    if (rank == 0) {
+    if (dist->world_rank == 0) {
         int sample_batch_size = 1;
         int* sample_Xs = calloc(sizeof(float), batch_size * seq_len);
         int* dummy_Ys = calloc(sizeof(float), batch_size);
