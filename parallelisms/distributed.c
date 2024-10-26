@@ -221,6 +221,17 @@ void Model_shard_tp(Model* self, int pg_rank, int pg_size) {
 
 // ========== Fully-sharded data parallelism utils ==========
 
+
+float* Model_create_flat_buffer_fsdp(Model* self) {
+    int max_layer_size = 0;
+    max_layer_size = max(Embedding_numel(self->wte), max_layer_size);
+    max_layer_size = max(Linear_weight_numel(self->fc_1), max_layer_size);
+    max_layer_size = max(Linear_weight_numel(self->fc_2), max_layer_size);
+    return malloc(sizeof(float) * 2 * max_layer_size);  // Account for gradients.
+}
+
+
+
 // TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
 void Model_shard_fsdp(Model* self, int pg_rank, int pg_size) {
     // Shard wte.

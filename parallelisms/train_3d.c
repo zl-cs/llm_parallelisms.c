@@ -130,16 +130,8 @@ int main(int argc, char** argv) {
     // loop for easy comparison.
     int vocab_size_padded = vocab_size + (dist->dp_size - (vocab_size % dist->dp_size));
     Model_pad_vocab(model, vocab_size_padded);
-    rank0_printf(dist->world_rank, "Padded vocab size: %d\n", vocab_size_padded);
     // Create temporary buffer to store allgathered params/grads of individual layers.
-    int max_layer_size = 0;
-    max_layer_size = max(Embedding_numel(model->wte) * dist->dp_size, max_layer_size);
-    max_layer_size = max(Linear_weight_numel(model->fc_1) * dist->dp_size, max_layer_size);
-    max_layer_size = max(Linear_weight_numel(model->fc_2) * dist->dp_size, max_layer_size);
-    rank0_printf(dist->world_rank, "Maximum layer size: %d\n", max_layer_size);
-    float* flat_buffer = malloc(sizeof(float) * 2 * max_layer_size);  // Account for gradients.
-    // Shard the model. Must happen _after_ the temporary buffer creation because Model_shard_pp
-    // deallocates fc_1 and fc_2.
+    float* flat_buffer = Model_create_flat_buffer_fsdp(model);
     Model_shard_3d(model, dist);
 
     // Train.
