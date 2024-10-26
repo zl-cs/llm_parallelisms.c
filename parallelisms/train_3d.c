@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
     int* Xs = malloc(sizeof(int) * batch_size * seq_len);
     int* Ys = malloc(sizeof(int) * batch_size);
 
-    // Create model with padded vocab.
+    // Create model.
     // Hack! We first construct the full model then shard the parameters. This is just to 
     // ensure that the model parameters are initialized in the exact same way as the single-threaded
     // training loop for easy comparision. In practice, this approach would OOM for large models.
@@ -145,8 +145,7 @@ int main(int argc, char** argv) {
     // Hack! We manually construct the padded embedding instead of using vocab_size_padded in
     // Model_create above. This ensures that the RNG state matches the single-threaded training
     // loop for easy comparison.
-    int vocab_size_padded = vocab_size + (dist->dp_size - (vocab_size % dist->dp_size));
-    Model_pad_vocab(model, vocab_size_padded);
+    Model_pad_vocab_fsdp(model, dist->dp_size);
     // Create temporary buffer to store allgathered params/grads of individual layers.
     float* flat_buffer = Model_create_flat_buffer_fsdp(model);
     Model_shard_3d(model, dist);

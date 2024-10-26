@@ -138,15 +138,4 @@ void Model_sample(Model* self, int* Xs, int* Ys, int seq_len) {
 }
 
 
-// Pads vocab embedding with extra 0 rows. 
-void Model_pad_vocab(Model* self, int vocab_size_padded) {
-    float* wte_padded = calloc(sizeof(float), vocab_size_padded * self->wte->emb_size);
-    memcpy(wte_padded, self->wte->embedding, sizeof(float) * Embedding_numel(self->wte));
-    float* wte_d_padded = calloc(sizeof(float), vocab_size_padded * self->wte->emb_size);
-    free(self->wte->embedding); self->wte->embedding = wte_padded;
-    free(self->wte->d_embedding); self->wte->d_embedding = wte_d_padded;
-    self->wte->vocab_size = vocab_size_padded;
-}
-
-
 #endif

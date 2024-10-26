@@ -1,5 +1,6 @@
 #include <mpi.h>
 #include <unistd.h>
+#include "data.c"
 #include "model.c"
 
 
@@ -221,6 +222,16 @@ void Model_shard_tp(Model* self, int pg_rank, int pg_size) {
 
 // ========== Fully-sharded data parallelism utils ==========
 
+void Model_pad_vocab_fsdp(Model* self, int pg_size) {
+    int vocab_size_padded = self->wte->vocab_size + (pg_size - (self->wte->vocab_size % pg_size));
+    float* wte_padded = calloc(sizeof(float), vocab_size_padded * self->wte->emb_size);
+    memcpy(wte_padded, self->wte->embedding, sizeof(float) * Embedding_numel(self->wte));
+    float* wte_d_padded = calloc(sizeof(float), vocab_size_padded * self->wte->emb_size);
+    free(self->wte->embedding); self->wte->embedding = wte_padded;
+    free(self->wte->d_embedding); self->wte->d_embedding = wte_d_padded;
+    self->wte->vocab_size = vocab_size_padded;
+}
+
 
 float* Model_create_flat_buffer_fsdp(Model* self) {
     int max_layer_size = 0;
@@ -229,7 +240,6 @@ float* Model_create_flat_buffer_fsdp(Model* self) {
     max_layer_size = max(Linear_weight_numel(self->fc_2), max_layer_size);
     return malloc(sizeof(float) * 2 * max_layer_size);  // Account for gradients.
 }
-
 
 
 // TODO(eugen): Consider sharding the bias as well, but usually not large enough to matter.
