@@ -27,7 +27,6 @@ typedef struct {
 
 
 Dist* Dist_create(int tp_size, int dp_size, int pp_size) {
-    srand(42);
     int world_rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -99,24 +98,6 @@ Dist* Dist_create(int tp_size, int dp_size, int pp_size) {
     self->world_rank = world_rank;
     self->world_size = world_size;
     return self;
-}
-
-
-void Dist_destroy(Dist* self) {
-    if (self->tp_group) {
-        free(self->tp_group);
-        free(self->tp_group);
-    }
-    if (self->dp_group) {
-        free(self->dp_group);
-        free(self->dp_group);
-    }
-    if (self->pp_group) {
-        free(self->pp_group);
-        free(self->pp_group);
-    }
-    free(self);
-    MPI_Finalize();
 }
 
 
