@@ -350,3 +350,44 @@ void Model_shard_pp(Model* self, int pg_rank) {
         exit(1);
     }
 }
+
+
+void Model_zerograd_pp(Model* self, int pg_rank) {
+    if (pg_rank == 2) {
+        memset(self->fc_2->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_2));
+        memset(self->fc_2->d_bias, 0, sizeof(float) * self->fc_2->out_features);
+        memset(self->relu_out->d_value, 0, sizeof(float) * Activation_numel(self->relu_out));
+        memset(self->fc_2_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_2_out));
+        memset(self->softmax_out->d_value, 0, sizeof(float) * Activation_numel(self->softmax_out));
+    } else if (pg_rank == 1) {
+        memset(self->fc_1->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_1));
+        memset(self->fc_1->d_bias, 0, sizeof(float) * self->fc_1->out_features);
+        memset(self->wte_out_flat->d_value, 0, sizeof(float) * Activation_numel(self->wte_out));
+        memset(self->fc_1_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_1_out));
+        memset(self->relu_out->d_value, 0, sizeof(float) * Activation_numel(self->relu_out));
+    } else if (pg_rank == 0) {
+        memset(self->wte->d_embedding, 0, sizeof(float) * Embedding_numel(self->wte));
+        memset(self->wte_out->d_value, 0, sizeof(float) * Activation_numel(self->wte_out));
+    } else {
+        printf("Unknown rank: %d\n", pg_rank);
+        MPI_Finalize();
+        exit(1);
+    }
+}
+
+
+void Model_step_pp(Model* self, float lr, int pg_rank) {
+    if (pg_rank == 0) {
+        sgd_step(self->wte->embedding, self->wte->d_embedding, Embedding_numel(self->wte), lr);
+    } else if (pg_rank == 1) {
+        sgd_step(self->fc_1->weight, self->fc_1->d_weight, Linear_weight_numel(self->fc_1), lr);
+        sgd_step(self->fc_1->bias, self->fc_1->d_bias, self->fc_1->out_features, lr);
+    } else if (pg_rank == 2) {
+        sgd_step(self->fc_2->weight, self->fc_2->d_weight, Linear_weight_numel(self->fc_2), lr);
+        sgd_step(self->fc_2->bias, self->fc_2->d_bias, self->fc_2->out_features, lr);
+    } else {
+        printf("Unknown rank: %d\n", pg_rank);
+        MPI_Finalize();
+        exit(1);
+    }
+}

@@ -38,53 +38,19 @@ float Model_forward_pp(Model* self, int* Xs, int* Ys, int pg_rank, MPI_Comm pg_c
 
 
 void Model_backward_pp(Model* self, int* Xs, int* Ys, int pg_rank, MPI_Comm pg_comm) {
+    Model_zerograd_pp(self, pg_rank);
     if (pg_rank == 2) {
-        // Zero grad.
-        memset(self->fc_2->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_2));
-        memset(self->fc_2->d_bias, 0, sizeof(float) * self->fc_2->out_features);
-        memset(self->relu_out->d_value, 0, sizeof(float) * Activation_numel(self->relu_out));
-        memset(self->fc_2_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_2_out));
-        memset(self->softmax_out->d_value, 0, sizeof(float) * Activation_numel(self->softmax_out));
-        // Backward.
         cross_entropy_softmax_backward(self->fc_2_out, self->softmax_out, Ys);
         Linear_backward(self->fc_2, self->relu_out, self->fc_2_out);
         send(self->relu_out->d_value, Activation_numel(self->relu_out), /* to_rank */ 1, pg_comm);
     } else if (pg_rank == 1) {
-        // Zero grad.
-        memset(self->fc_1->d_weight, 0, sizeof(float) * Linear_weight_numel(self->fc_1));
-        memset(self->fc_1->d_bias, 0, sizeof(float) * self->fc_1->out_features);
-        memset(self->wte_out_flat->d_value, 0, sizeof(float) * Activation_numel(self->wte_out));
-        memset(self->fc_1_out->d_value, 0, sizeof(float) * Activation_numel(self->fc_1_out));
-        memset(self->relu_out->d_value, 0, sizeof(float) * Activation_numel(self->relu_out));
-        // Backward.
         recv(self->relu_out->d_value, Activation_numel(self->relu_out), /* from_rank */ 2, pg_comm);
         relu_backward(self->fc_1_out, self->relu_out);
         Linear_backward(self->fc_1, self->wte_out_flat, self->fc_1_out);
         send(self->wte_out_flat->d_value, Activation_numel(self->wte_out_flat), /* to_rank */ 0, pg_comm);
     } else if (pg_rank == 0) {
-        // Zero grad.
-        memset(self->wte->d_embedding, 0, sizeof(float) * Embedding_numel(self->wte));
-        memset(self->wte_out->d_value, 0, sizeof(float) * Activation_numel(self->wte_out));
-        // Backward.
         recv(self->wte_out->d_value, Activation_numel(self->wte_out), /* from_rank */ 1, pg_comm);
         Embedding_backward(self->wte, Xs, self->wte_out);
-    } else {
-        printf("Unknown rank: %d\n", pg_rank);
-        MPI_Finalize();
-        exit(1);
-    }
-}
-
-
-void Model_step_pp(Model* self, float lr, int pg_rank) {
-    if (pg_rank == 0) {
-        sgd_step(self->wte->embedding, self->wte->d_embedding, Embedding_numel(self->wte), lr);
-    } else if (pg_rank == 1) {
-        sgd_step(self->fc_1->weight, self->fc_1->d_weight, Linear_weight_numel(self->fc_1), lr);
-        sgd_step(self->fc_1->bias, self->fc_1->d_bias, self->fc_1->out_features, lr);
-    } else if (pg_rank == 2) {
-        sgd_step(self->fc_2->weight, self->fc_2->d_weight, Linear_weight_numel(self->fc_2), lr);
-        sgd_step(self->fc_2->bias, self->fc_2->d_bias, self->fc_2->out_features, lr);
     } else {
         printf("Unknown rank: %d\n", pg_rank);
         MPI_Finalize();

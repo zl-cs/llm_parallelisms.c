@@ -57,7 +57,30 @@ float Model_forward_3d(Model* self, int* Xs, int* Ys, float* flat_buffer, Dist* 
     return loss;
 }
 
- 
+
+void Model_backward_3d(Model* self, int* Xs, int* Ys, float* flat_buffer, Dist* dist) {
+    Model_zerograd_pp(self, dist->pp_rank);
+    if (dist->pp_rank == 2) {
+        cross_entropy_softmax_backward(self->fc_2_out, self->softmax_out, Ys);
+        Linear_backward_fsdp(self->fc_2, self->relu_out, self->fc_2_out, flat_buffer, dist->dp_comm, dist->dp_size);
+        send(self->relu_out->d_value, Activation_numel(self->relu_out), /* to_rank */ 1, dist->pp_comm);
+    } else if (dist->pp_rank == 1) {
+        recv(self->relu_out->d_value, Activation_numel(self->relu_out), /* from_rank */ 2, dist->pp_comm);
+        relu_backward(self->fc_1_out, self->relu_out);
+        Linear_backward_fsdp(self->fc_1, self->wte_out_flat, self->fc_1_out, flat_buffer, dist->dp_comm, dist->dp_size);
+        send(self->wte_out_flat->d_value, Activation_numel(self->wte_out_flat), /* to_rank */ 0, dist->pp_comm);
+    } else if (dist->pp_rank == 0) {
+        recv(self->wte_out->d_value, Activation_numel(self->wte_out), /* from_rank */ 1, dist->pp_comm);
+        allreduce_mean(self->wte_out->d_value, Activation_numel(self->wte_out_flat), dist->tp_comm, dist->tp_size);
+        Embedding_backward_fsdp(self->wte, Xs, self->wte_out, flat_buffer, dist->dp_comm, dist->dp_size);
+    } else {
+        printf("Unknown rank: %d\n", dist->pp_rank);
+        MPI_Finalize();
+        exit(1);
+    }
+}
+
+
 int main(int argc, char** argv) {
     int global_batch_size = 32;
     int seq_len = 16;  // seq_len is computed offline and is equal to the longest word.
@@ -120,13 +143,31 @@ int main(int argc, char** argv) {
     Model_shard_3d(model, dist);
 
     // Train.
-    Dataset_get_rank_batch(
-        &train_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, dist->dp_rank, dist->dp_size 
-    );
-    float loss = Model_forward_3d(model, Xs, Ys, flat_buffer, dist);
+    float lr = 0.1;
+    int steps= 25000;
+    for (int step = 0; step < steps; step++) {
+        Dataset_get_rank_batch(
+            &train_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, dist->dp_rank, dist->dp_size 
+        );
+        float loss = Model_forward_3d(model, Xs, Ys, flat_buffer, dist);
+        allreduce_mean(&loss, /* size */ 1, dist->dp_comm, dist->dp_size);
+        rank0_printf(dist->world_rank, "step: %d, loss %f\n", step, loss);
+        Model_backward_3d(model, Xs, Ys, flat_buffer, dist);
+        Model_step_pp(model, lr, dist->pp_rank);
+    }
+
+    // Validate.
+    float loss = 0.0f;
+    int n_valid_batches = 100;
+    for (int i = 0; i < n_valid_batches; i ++) {
+        Dataset_get_rank_batch(
+            &test_split, global_Xs, global_Ys, Xs, Ys, global_batch_size, dist->dp_rank, dist->dp_size 
+        );
+        loss += Model_forward_3d(model, Xs, Ys, flat_buffer, dist);
+    }
     allreduce_mean(&loss, /* size */ 1, dist->dp_comm, dist->dp_size);
-    rank0_printf(dist->world_rank, "step: %d, loss %f\n", 0, loss);
- 
+    rank0_printf(dist->world_rank, "Final validation loss: %f\n", loss / n_valid_batches);
+
     MPI_Finalize();
     return 0;
 }
