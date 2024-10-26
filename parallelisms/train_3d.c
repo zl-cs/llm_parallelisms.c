@@ -24,6 +24,7 @@
 
 
 void Model_shard_3d(Model* self, Dist* dist) {
+    // Note that the sharding order is important and should be done "inside->out".
     Model_shard_tp(self, dist->tp_rank, dist->tp_size);
     Model_shard_fsdp(self, dist->dp_rank, dist->dp_size);
     Model_shard_pp(self, dist->pp_rank);
@@ -77,6 +78,22 @@ void Model_backward_3d(Model* self, int* Xs, int* Ys, float* flat_buffer, Dist* 
         printf("Unknown rank: %d\n", dist->pp_rank);
         MPI_Finalize();
         exit(1);
+    }
+}
+
+
+void Model_sample_3d(Model* self, int* Xs, int* Ys, float* flat_buffer, Dist* dist, int seq_len) {
+    bool done = false;
+    while (!done) {
+        Model_forward_3d(self, Xs, Ys, flat_buffer, dist);
+        int tok;
+        if (dist->pp_rank == 2) {
+            tok = Model_sample_token(self);
+        }
+        // Choose an aribitrary pp_rank=2 and broadcast its token to the rest of the world. Because of
+        // how we set up the distributed environment, we're guaranteed that the last rank is pp_rank=2.
+        MPI_Bcast(&tok, /* count */ 1, MPI_INT, /* root */ dist->world_size - 1, MPI_COMM_WORLD);
+        done = Model_sample_update_input(Xs, Ys, tok, seq_len); 
     }
 }
 
@@ -159,6 +176,18 @@ int main(int argc, char** argv) {
     }
     allreduce_mean(&loss, /* size */ 1, dist->dp_comm, dist->dp_size);
     rank0_printf(dist->world_rank, "Final validation loss: %f\n", loss / n_valid_batches);
+
+    // Sample.
+    int sample_batch_size = 1;
+    int* sample_Xs = calloc(sizeof(float), batch_size * seq_len);
+    int* dummy_Ys = calloc(sizeof(float), batch_size);
+    for (int i = 0; i < 10 ; i++)  {
+        Model_sample_3d(model, sample_Xs, dummy_Ys, flat_buffer, dist, seq_len);
+        if (dist->world_rank == 0) {
+            Dataset_print_batch(sample_Xs, dummy_Ys, sample_batch_size, seq_len);
+        }
+        memset(sample_Xs, 0, sizeof(float) * batch_size * seq_len);
+    }
 
     MPI_Finalize();
     return 0;
