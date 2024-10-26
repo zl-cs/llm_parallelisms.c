@@ -4,6 +4,9 @@
 //     * Gradient sharding (i.e. ZeRO stage 2)
 //     * Model parameter sharding (i.e. ZeRO stage 3)
 // Optimizer parameter sharding is not (currently) supported because we use SGD.
+// 
+// To run:
+//     mpicc -Ofast parallelisms/train_dp.c && mpirun -n <num-ranks> a.out
 //
 // [1]: https://arxiv.org/abs/1910.02054
 
@@ -26,18 +29,8 @@ Model* Model_create_rank_shard(
 
     // Pad vocab size to be divisible by world_size.
     int vocab_size_padded = vocab_size + (pg_size - (vocab_size % pg_size));
+    Model_pad_vocab(self, vocab_size_padded, emb_size);
     // rank0_printf(rank, "Padded vocab size: %d\n", vocab_size_padded);
-    // Hack! We manually construct the padded embedding instead of using vocab_size_padded in
-    // Model_create above. This ensures that the RNG state matches the single-threaded training
-    // loop for easy comparison.
-    float* wte_padded = calloc(sizeof(float), vocab_size_padded * emb_size);
-    memcpy(wte_padded, self->wte->embedding, sizeof(float) * Embedding_numel(self->wte));
-    float* wte_d_padded = calloc(sizeof(float), vocab_size_padded * emb_size);
-    free(self->wte->embedding);
-    free(self->wte->d_embedding);
-    self->wte->embedding = wte_padded;
-    self->wte->d_embedding = wte_d_padded;
-    self->wte->vocab_size = vocab_size_padded;
 
     // Shard wte.
     int wte_shard_size = Embedding_numel(self->wte) / pg_size;

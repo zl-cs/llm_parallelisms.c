@@ -31,7 +31,11 @@ Dist* Dist_create(int tp_size, int dp_size, int pp_size) {
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     if (tp_size * dp_size * pp_size != world_size) {
-        rank0_printf(world_rank, "Invalid distributed environment setup!\n");
+        rank0_printf(
+            world_rank, 
+            "Invalid distributed environment: tp=%d * dp%d * pp=%d != world_size=%d\n", 
+            tp_size, dp_size, pp_size, world_size
+        );
         MPI_Finalize();
         exit(0);
     }
