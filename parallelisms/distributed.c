@@ -71,14 +71,8 @@ Dist* Dist_create(int tp_size, int dp_size, int pp_size) {
         for (int i = 0; i < pp_size; i++) {
             pp_group_ranks[i] = i * (tp_size * dp_size) + dp_rank * tp_size + tp_rank;
         }
-        usleep(world_rank * 1000 * 100);
-        printf("Rank %d: ", world_rank);
-        for (int i = 0; i < pp_size; i++) {
-            printf("%d ", pp_group_ranks[i]);
-        }
-        printf("\n");
         pp_group = malloc(sizeof(MPI_Group)); pp_comm = malloc(sizeof(MPI_Comm));
-        MPI_Group_incl(world_group, dp_size, pp_group_ranks, &pp_group);
+        MPI_Group_incl(world_group, pp_size, pp_group_ranks, &pp_group);
         MPI_Comm_create(MPI_COMM_WORLD, pp_group, &pp_comm);
     }
 
