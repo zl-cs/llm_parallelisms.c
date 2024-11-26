@@ -52,8 +52,6 @@ float Model_forward_3d(Model* self, int* Xs, int* Ys, float* flat_buffer, Dist* 
         MPI_Finalize();
         exit(1);
     }
-    // We don't technically need to broadcast here, but it's nicer if all the pp ranks have the
-    // same loss value at the end.
     MPI_Bcast(&loss, /* count */ 1, MPI_FLOAT, /* root */ 2, dist->pp_comm);
     return loss;
 }
