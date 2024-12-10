@@ -1,4 +1,4 @@
-# Spelled out implementation of LLM parallelisms in pure C
+# LLM parallelisms in pure C, spelled out
 
 You like [makemore](https://github.com/karpathy/makemore/tree/master)? You like [llm.c](https://github.com/karpathy/llm.c)? You love `parallelisms`!
 
