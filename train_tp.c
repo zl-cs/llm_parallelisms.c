@@ -8,9 +8,9 @@
 
 #include <mpi.h>
 #include <stdlib.h>
-#include "data.c"
-#include "distributed.c"
-#include "model.c"
+#include "src/data.c"
+#include "src/distributed.c"
+#include "src/model.c"
 
 
 float Model_forward_tp(Model* self, int* Xs, int* Ys, MPI_Comm pg_comm, int pg_size) {

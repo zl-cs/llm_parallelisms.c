@@ -14,8 +14,8 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "data.c"
-#include "model.c"
+#include "src/data.c"
+#include "src/model.c"
 
 
 int main() {

@@ -5,9 +5,9 @@
 
 #include <mpi.h>
 #include <stdlib.h>
-#include "data.c"
-#include "distributed.c"
-#include "model.c"
+#include "src/data.c"
+#include "src/distributed.c"
+#include "src/model.c"
 
 
 int main(int argc, char** argv) {
