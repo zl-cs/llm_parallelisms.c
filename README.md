@@ -4,11 +4,11 @@ You like [makemore](https://github.com/karpathy/makemore/tree/master)? You like 
 
 `parallelisms` is an educational library which implements SOTA LLM parallelisms in pure C. 
 It aims to have a simple, spelled out implementations for maximum clarity. Currently supports:
-  - Data parallel [[code](https://github.com/EugenHotaj/ml.c/blob/main/parallelisms/train_dp.c)]
-  - Fully-sharded data parallel (FSDP) [[code](https://github.com/EugenHotaj/ml.c/blob/main/parallelisms/train_fsdp.c)]
-  - Tensor parallel [[code](https://github.com/EugenHotaj/ml.c/blob/main/parallelisms/train_tp.c)]
-  - Pipeline parallel [[code](https://github.com/EugenHotaj/ml.c/blob/main/parallelisms/train_pp.c)]
-  - **Advanced 3D Parallelism**: combining FSDP, tensor, and pipeline parallelism [[code](https://github.com/EugenHotaj/ml.c/blob/main/parallelisms/train_3d.c)]
+  - Data parallel [[code](https://github.com/EugenHotaj/ml.c/blob/main/train_dp.c)]
+  - Fully-sharded data parallel (FSDP) [[code](https://github.com/EugenHotaj/ml.c/blob/main/train_fsdp.c)]
+  - Tensor parallel [[code](https://github.com/EugenHotaj/ml.c/blob/main/train_tp.c)]
+  - Pipeline parallel [[code](https://github.com/EugenHotaj/ml.c/blob/main/train_pp.c)]
+  - **Advanced 3D Parallelism**: combining FSDP, tensor, and pipeline parallelism [[code](https://github.com/EugenHotaj/ml.c/blob/main/train_3d.c)]
 
 
 While everything runs on CPU using MPI, the key ideas illustrated here are exactly how SOTA LLMs (like [Llama 3](https://arxiv.org/abs/2407.21783)) are trained.
