@@ -109,12 +109,12 @@ Dist* Dist_create(int tp_size, int dp_size, int pp_size) {
 }
 
 
-void send(float* input, int input_size, int to_rank, MPI_Comm pg_comm) {
+static void send(float* input, int input_size, int to_rank, MPI_Comm pg_comm) {
     MPI_Send(input, input_size, MPI_FLOAT, to_rank, 0, pg_comm);
 }
 
 
-void recv(float* output, int output_size, int from_rank, MPI_Comm pg_comm) {
+static void recv(float* output, int output_size, int from_rank, MPI_Comm pg_comm) {
     MPI_Status status;
     MPI_Recv(output, output_size, MPI_FLOAT, from_rank, 0, pg_comm, &status);
 }
