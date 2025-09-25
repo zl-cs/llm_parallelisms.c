@@ -17,7 +17,13 @@ The only dependency is OpenMPI which can be downloaded [here](https://docs.open-
 OpenMPI, you can compile and run any of the training scripts, for example `train_fsdp.c`:
 
 ```
-mpicc -Ofast train_fsdp.c && mpirun -n 4 a.out
+mpicc -Ofast train_fsdp.c -lm && mpirun -n 4 a.out
+```
+**加上-lm参数表示链接到数学库，不加该参数在zlfw机器上会报以下错误：**
+```
+/usr/bin/ld: /tmp/ccFeHHJ5.o: undefined reference to symbol 'exp@@GLIBC_2.29'
+/usr/bin/ld: /lib/x86_64-linux-gnu/libm.so.6: error adding symbols: DSO missing from command line
+collect2: error: ld returned 1 exit status
 ```
 
 Here `-n` specifies the number of FSDP shards. If you don't have enough cores for the desired parallelism level, you can tell OpenMPI to oversubscribe the cores. For example, here
